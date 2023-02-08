@@ -12,7 +12,7 @@ My apologies for the mess.
 Here's an example of a post made in a discord channel when someone from the watchlist goes live:
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot%202023-02-07%20205438.png)
 
-Here's the bot starting on my Linux PC.
+Here's the bot starting on my Linux PC.  
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot_from_2023-02-07_21-37-30.png)
 
 Here's the bot running and giving/removing roles of someone going live on twitch.

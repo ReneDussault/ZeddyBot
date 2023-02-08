@@ -1,0 +1,9 @@
+{
+    "disc_token": "yourtokenhere",
+    "twitch_client_id": "youridhere",
+    "twitch_secret": "yoursecrethere",
+    "access_token": "yourtokenhere",
+    "watchlist": [
+        "yourusernamehere"
+    ]
+}

@@ -9,4 +9,5 @@ There's some placeholder !ping and !hello commands for future updates.
 Major refactoring will be needed to make this look any good.
 My apologies for the mess.
 
+Here's an example of a post made in a discord channel when someone from the watchlist goes live:
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot%202023-02-07%20205438.png)

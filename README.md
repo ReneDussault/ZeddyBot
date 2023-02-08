@@ -16,5 +16,5 @@ Here's an example of a post made in a discord channel when someone from the watc
 Here's the bot starting on my Linux PC.  
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot_from_2023-02-07_21-56-48.png)
 
-Here's the bot running and giving/removing roles of someone going live on twitch.
+Here's the bot giving/removing roles to/from someone going live on twitch.
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot_from_2023-02-07_21-34-15.png)

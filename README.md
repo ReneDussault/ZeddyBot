@@ -18,3 +18,6 @@ Here's the bot starting on my Linux PC.
 
 Here's the bot giving/removing roles to/from someone going live on twitch.
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot_from_2023-02-07_21-34-15.png)
+
+Here's an example of someone with the LIVE role in discord.
+![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/live.bmp)

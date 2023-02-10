@@ -10,14 +10,14 @@ There's some placeholder !ping and !hello commands for future updates.
 Major refactoring will be needed to make this look any good.  
 My apologies for the mess.  
 
-Here's an example of a post made in a discord channel when someone from the watchlist goes live:
+Here's an example of a post made in a discord channel when someone from the watchlist goes live.  
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot%202023-02-07%20205438.png)
 
 Here's the bot starting on my Linux PC.  
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot_from_2023-02-07_21-56-48.png)
 
-Here's the bot giving/removing roles to/from someone going live on twitch.
+Here's the bot giving/removing roles to/from someone going live on twitch.  
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot_from_2023-02-07_21-34-15.png)
 
-Here's an example of someone with the LIVE role in discord.
+Here's an example of someone with the LIVE role in discord.  
 ![alt text](https://github.com/ReneDussault/ZeddyBot/blob/main/live.bmp)

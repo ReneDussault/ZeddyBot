@@ -1,8 +1,7 @@
+from datetime import datetime
 import json
-from datetime import datetime, timezone
-
-import discord
 import requests as rq
+import discord
 from discord.ext import commands
 from discord.ext.tasks import loop
 
@@ -36,30 +35,24 @@ LIVE_ROLE_ID = 983061320133922846
 
 @bot.event
 async def on_member_update(before, after):
-    print(
-        f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is checking for roles----------"
-    )
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is checking for roles----------")
     if any(a for a in after.activities if a.type == discord.ActivityType.streaming):
         if LIVE_ROLE_ID in after._roles:
             return
-        print(
-            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Giving LIVE role to {after.name}----------"
-        )
-        await after.add_roles(after.guild.get_role(LIVE_ROLE_ID))
+        else:
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Giving LIVE role to {after.name}----------")
+            await after.add_roles(after.guild.get_role(LIVE_ROLE_ID))
 
-    elif LIVE_ROLE_ID in after._roles:
-        print(
-            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Removing LIVE role from {after.name}----------"
-        )
-        await after.remove_roles(after.guild.get_role(LIVE_ROLE_ID))
+    else:
+        if LIVE_ROLE_ID in after._roles:
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Removing LIVE role from {after.name}----------")
+            await after.remove_roles(after.guild.get_role(LIVE_ROLE_ID))
 
 
 # print that we logged in once the bot is ready
 @bot.event
 async def on_ready():
-    print(
-        f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is connected to Discord----------"
-    )
+    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is connected to Discord----------")
 
 
 # ping command
@@ -84,10 +77,10 @@ async def check_twitch_online_streamers():
 
     notifications = get_notifications()
     for notification in notifications:
-        print("----------Sending discord notification----------")
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Sending discord notification----------")
         await channel.send(
             f"We are now live! {notification['title']}.\nStreaming: {notification['game_name']} at https://www.twitch.tv/renegadezed\n"
-        )
+            )
 
 
 """
@@ -99,6 +92,7 @@ twitch stuff below
 
 # oath access token
 def get_app_access_token():
+    
     params = {
         "client_id": config_data["twitch_client_id"],
         "client_secret": config_data["twitch_secret"],
@@ -106,30 +100,53 @@ def get_app_access_token():
     }
 
     response = rq.post("https://id.twitch.tv/oauth2/token", params=params)
-    return response.json()["access_token"]
+    access_token = response.json()["access_token"]
+
+    return access_token
 
 
-# access_token = get_app_access_token()
+access_token = get_app_access_token()
+config_data['access_token'] = access_token
 # print(access_token)
 
 
 # convert config.json watchlist names to appropriate twitch login names and IDs
 def get_users(login_names):
+
     params = {"login": login_names}
+
+    if config_data['access_token'] != access_token:
+
+        acc_tok = get_app_access_token()
+
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Changing access token----------")
+        config_data['access_token'] = acc_tok
+    
+        with open("config.json", "w") as f:
+            json.dump(config_data, f)
 
     headers = {
         "Authorization": f"Bearer {config_data['access_token']}",
         "Client-Id": config_data["twitch_client_id"],
     }
 
-    response = rq.get(
-        "https://api.twitch.tv/helix/users", params=params, headers=headers
-    )
+    response = rq.get("https://api.twitch.tv/helix/users", params=params, headers=headers)
     return {entry["login"]: entry["id"] for entry in response.json()["data"]}
 
 
 # get stream info when live and reformat to a dictionary
 def get_streams(users):
+
+    if config_data['access_token'] != access_token:
+
+        acc_tok = get_app_access_token()
+
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Changing access token----------")
+        config_data['access_token'] = acc_tok
+
+        with open("config.json", "w") as f:
+            json.dump(config_data, f)
+
     params = {"user_id": users.values()}
 
     headers = {
@@ -137,9 +154,7 @@ def get_streams(users):
         "Client-Id": config_data["twitch_client_id"],
     }
 
-    response = rq.get(
-        "https://api.twitch.tv/helix/streams", params=params, headers=headers
-    )
+    response = rq.get("https://api.twitch.tv/helix/streams", params=params, headers=headers)
     return {entry["user_login"]: entry for entry in response.json()["data"]}
 
 
@@ -154,7 +169,7 @@ def get_notifications():
     notifications = []
     for user_name in config_data["watchlist"]:
         if user_name not in online_users:
-            online_users[user_name] = datetime.now(timezone.utc)
+            online_users[user_name] = datetime.utcnow()
 
         if user_name not in streams:
             online_users[user_name] = None

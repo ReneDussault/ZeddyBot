@@ -102,12 +102,49 @@ async def check_twitch_online_streamers():
 
     notifications = get_notifications()
     for notification in notifications:
+
         print(
             f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Sending discord notification----------"
         )
-        await channel.send(
-            f"We are now live! {notification['title']}.\nStreaming: {notification['game_name']} at https://www.twitch.tv/renegadezed\n"
+
+        embed = discord.Embed(
+            title=f"{notification['user_name']} is live on Twitch",
+            url=f"https://www.twitch.tv/{notification['user_login']}",
+            color=0x9146FF,
+            timestamp=datetime.now(),
         )
+
+        embed.set_author(
+            name=f"{notification['user_name']}",
+            url=f"https://www.twitch.tv/{notification['user_login']}",
+            icon_url=f"https://avatar.glue-bot.xyz/twitch/{notification['user_login']}",
+        )
+
+        embed.set_thumbnail(
+            url=f"https://avatar-resolver.vercel.app/twitch-boxart/{notification['game_name']}"
+        )
+
+        embed.add_field(
+            name="",
+            value=notification["title"] or "No Title",
+            inline=False,
+        )
+
+        embed.add_field(
+            name=":joystick: Game",
+            value=notification["game_name"] or "No Game",
+            inline=True,
+        )
+
+        #        embed.add_field(
+        #            name=':busts_in_silhouette: Viewers',
+        #            value=notification['current_viewers'],
+        #            inline=True
+        #        )
+
+        #        embed.set_image(url=f"{notification['stream_preview']}?{notification['moment']}")
+
+        await channel.send(embed=embed)
 
 
 """
@@ -183,6 +220,8 @@ def get_notifications():
             if online_users[user_name] is None or started_at > online_users[user_name]:
                 notifications.append(streams[user_name])
                 online_users[user_name] = started_at
+
+    #    print(notifications)
 
     return notifications
 

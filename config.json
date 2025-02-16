@@ -1,9 +1,16 @@
 {
-    "disc_token": "yourtokenhere",
-    "twitch_client_id": "youridhere",
-    "twitch_secret": "yoursecrethere",
-    "access_token": "yourtokenhere",
+    "disc_token": "yourdiscordtokenhere",
+    "twitch_client_id": "yourtwitchidhere",
+    "twitch_secret": "yourtwitchsecrethere",
+    "access_token": "yourtwitchtokenhere",
     "watchlist": [
-        "yourusernamehere"
-    ]
+        "yourchannelname",
+        "otherchannelnametoo"
+    ],
+    "twitch_bot_username": "twitchbotaccountname",
+    "twitch_bot_client_id": "twitchbotid",
+    "twitch_bot_access_token": "twitchbotsecret",
+    "twitch_bot_refresh_token": "twitchbotrefreshtoken",
+    "twitch_bot_secret": "twitchbotsecret",
+    "target_channel": "yourchannelname"
 }

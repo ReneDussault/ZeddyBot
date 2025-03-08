@@ -68,7 +68,7 @@ class Config:
 
     @property
     def target_channel(self):
-        return self.data.get("target_channel", "RenegadeZed")
+        return self.data.get("target_channel", "")
 
     @property
     def twitch_bot_client_id(self):

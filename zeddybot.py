@@ -78,6 +78,21 @@ class Config:
     def twitch_bot_secret(self):
         return self.data.get("twitch_bot_secret", "")
 
+    @property
+    def discord_channel_id(self):
+        return self.data.get("discord_channel_id", "")
+
+    @property
+    def discord_live_role_id(self):
+        return self.data.get("discord_live_role_id", "")
+
+    @property
+    def discord_drifters_role_id(self): 
+        return self.data.get("discord_drifters_role_id", "")
+
+    @property
+    def discord_outlaw_role_id(self):
+        return self.data.get("discord_outlaw_role_id", "")
 
 class TwitchAPI:
     def __init__(self, config: Config):
@@ -254,10 +269,10 @@ class ZeddyBot(commands.Bot):
         self.twitch_chat_bot = TwitchChatBot(config, self.twitch_api)
         self.notification_manager = StreamNotificationManager(self.twitch_api, config, self.twitch_chat_bot)
 
-        self.CHANNEL_ID = 966493808869138442
-        self.LIVE_ROLE_ID = 983061320133922846
-        self.DRIFTERS_ROLE_ID = 1347960879500755066
-        self.OUTLAW_ROLE_ID = 1010279216018903061
+        self.CHANNEL_ID = config.discord_channel_id
+        self.LIVE_ROLE_ID =  config.discord_live_role_id
+        self.DRIFTERS_ROLE_ID = config.discord_drifters_role_id
+        self.OUTLAW_ROLE_ID = config.discord_outlaw_role_id
 
         # timestamps for tracking role upgrades
         self.user_join_timestamps = {}

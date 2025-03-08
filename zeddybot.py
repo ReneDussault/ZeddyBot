@@ -339,7 +339,7 @@ class ZeddyBot(commands.Bot):
         """
         promote member to Outlaws role after 30 days
         """
-        await asyncio.sleep(days)  # convert days to seconds
+        await asyncio.sleep(days * 24 * 60 * 60)  # convert days to seconds
 
         # check if member is still in the server
         guild = member.guild

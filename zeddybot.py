@@ -91,8 +91,8 @@ class Config:
         return self.data.get("discord_drifters_role_id", "")
 
     @property
-    def discord_outlaw_role_id(self):
-        return self.data.get("discord_outlaw_role_id", "")
+    def discord_outlaws_role_id(self):
+        return self.data.get("discord_outlaws_role_id", "")
 
 class TwitchAPI:
     def __init__(self, config: Config):
@@ -272,7 +272,7 @@ class ZeddyBot(commands.Bot):
         self.CHANNEL_ID = config.discord_channel_id
         self.LIVE_ROLE_ID =  config.discord_live_role_id
         self.DRIFTERS_ROLE_ID = config.discord_drifters_role_id
-        self.OUTLAW_ROLE_ID = config.discord_outlaw_role_id
+        self.OUTLAWS_ROLE_ID = config.discord_outlaws_role_id
 
         # timestamps for tracking role upgrades
         self.user_join_timestamps = {}
@@ -323,11 +323,14 @@ class ZeddyBot(commands.Bot):
 
         @self.event
         async def on_member_join(member):
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------{member} has joined the server----------")
+            
             # drifters role
-            drifter_role = member.guild.get_role(self.DRIFTERS_ROLE_ID)
-            if drifter_role:
-                await member.add_roles(drifter_role)
-                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Added Drifters role to {member.name}----------")
+            has_drifter_role = self.DRIFTERS_ROLE_ID in member.roles
+            
+            if not has_drifter_role:
+                await member.add_roles(member.guild.get_role(int(self.DRIFTERS_ROLE_ID)))
+                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Added Drifters role to {member}----------")
 
                 # role upgrade after 30 days
                 self.loop.create_task(self._upgrade_role_after_delay(member))
@@ -336,7 +339,7 @@ class ZeddyBot(commands.Bot):
         """
         promote member to Outlaws role after 30 days
         """
-        await asyncio.sleep(days * 24 * 60 * 60)  # Convert days to seconds
+        await asyncio.sleep(days)  # convert days to seconds
 
         # check if member is still in the server
         guild = member.guild
@@ -344,10 +347,11 @@ class ZeddyBot(commands.Bot):
         if not updated_member:
             return
 
-        # upgrade to Outlaws role
-        outlaw_role = guild.get_role(self.OUTLAW_ROLE_ID)
-        if outlaw_role:
-            await updated_member.add_roles(outlaw_role)
+        # promote to Outlaws role
+        has_outlaw_role = self.OUTLAWS_ROLE_ID in member.roles
+        if not has_outlaw_role:
+            await updated_member.add_roles(updated_member.guild.get_role(int(self.OUTLAWS_ROLE_ID)))
+            await updated_member.remove_roles(updated_member.guild.get_role(int(self.DRIFTERS_ROLE_ID)))
             print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Upgraded {updated_member.name} to Outlaws after {days} days----------")
 
     async def _handle_live_role_update(self, before, after):

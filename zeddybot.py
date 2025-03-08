@@ -13,7 +13,7 @@ import asyncio
 class Config:
     def __init__(self, config_path=None):
         if config_path is None:
-            config_path = "/home/zed/Projects/ZeddyBot_enhanced/config.json"
+            config_path = "config.json"
 
         with open(config_path) as config_file:
             self.data = json.load(config_file)
@@ -111,9 +111,7 @@ class TwitchAPI:
                 self.config.twitch_bot_access_token = data["access_token"]
                 self.config.twitch_bot_refresh_token = data["refresh_token"]
                 self.config.save()
-                print(
-                    f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Refreshed bot access token----------"
-                )
+                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Refreshed bot access token----------")
                 return True
             else:
                 print(f"Failed to refresh bot token: {response.text}")
@@ -128,9 +126,7 @@ class TwitchAPI:
             "Authorization": f"Bearer {self.config.access_token}",
             "Client-Id": self.config.twitch_client_id,
         }
-        response = requests.get(
-            "https://api.twitch.tv/helix/users", params=params, headers=headers
-        )
+        response = requests.get("https://api.twitch.tv/helix/users", params=params, headers=headers)
         return {entry["login"]: entry["id"] for entry in response.json()["data"]}
 
     def get_streams(self, users):
@@ -139,9 +135,7 @@ class TwitchAPI:
             "Authorization": f"Bearer {self.config.access_token}",
             "Client-Id": self.config.twitch_client_id,
         }
-        response = requests.get(
-            "https://api.twitch.tv/helix/streams", params=params, headers=headers
-        )
+        response = requests.get("https://api.twitch.tv/helix/streams", params=params, headers=headers)
         return {entry["user_login"]: entry for entry in response.json()["data"]}
 
 
@@ -163,20 +157,14 @@ class TwitchChatBot:
             self.socket.connect((self.server, self.port))
 
             # pass Twitch IRC credentials
-            self.socket.send(
-                f"PASS oauth:{self.config.twitch_bot_access_token}\r\n".encode("utf-8")
-            )
-            self.socket.send(
-                f"NICK {self.config.twitch_bot_username}\r\n".encode("utf-8")
-            )
+            self.socket.send(f"PASS oauth:{self.config.twitch_bot_access_token}\r\n".encode("utf-8"))
+            self.socket.send(f"NICK {self.config.twitch_bot_username}\r\n".encode("utf-8"))
             self.socket.send(f"JOIN #{self.config.target_channel}\r\n".encode("utf-8"))
 
             # set socket to non-blocking
             self.socket.setblocking(0)
             self.connected = True
-            print(
-                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Connected to Twitch chat as {self.config.twitch_bot_username}----------"
-            )
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Connected to Twitch chat as {self.config.twitch_bot_username}----------")
 
             # send initial message to confirm bot is working
             self.send_message("ZeddyBot is now active in chat!")
@@ -202,12 +190,8 @@ class TwitchChatBot:
                 return False
 
         try:
-            self.socket.send(
-                f"PRIVMSG #{self.config.target_channel} :{message}\r\n".encode("utf-8")
-            )
-            print(
-                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Sent message to Twitch chat: {message}----------"
-            )
+            self.socket.send(f"PRIVMSG #{self.config.target_channel} :{message}\r\n".encode("utf-8"))
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Sent message to Twitch chat: {message}----------")
             return True
         except Exception as e:
             print(f"Error sending message to Twitch chat: {e}")
@@ -229,9 +213,7 @@ class TwitchChatBot:
 
 
 class StreamNotificationManager:
-    def __init__(
-        self, twitch_api: TwitchAPI, config: Config, chat_bot: TwitchChatBot = None
-    ):
+    def __init__(self, twitch_api: TwitchAPI, config: Config, chat_bot: TwitchChatBot = None):
         self.twitch_api = twitch_api
         self.config = config
         self.chat_bot = chat_bot
@@ -249,24 +231,14 @@ class StreamNotificationManager:
             if user_name not in streams:
                 self.online_users[user_name] = None
             else:
-                started_at = datetime.strptime(
-                    streams[user_name]["started_at"], "%Y-%m-%dT%H:%M:%SZ"
-                )
-                if (
-                    self.online_users[user_name] is None
-                    or started_at > self.online_users[user_name]
-                ):
+                started_at = datetime.strptime(streams[user_name]["started_at"], "%Y-%m-%dT%H:%M:%SZ")
+                if self.online_users[user_name] is None or started_at > self.online_users[user_name]:
                     notifications.append(streams[user_name])
                     self.online_users[user_name] = started_at
 
                     # send notification to Twitch chat if this is the target channel
-                    if (
-                        self.chat_bot
-                        and user_name.lower() == self.config.target_channel.lower()
-                    ):
-                        self.chat_bot.send_message(
-                            f"Stream is now live: {streams[user_name]['title']} - playing {streams[user_name]['game_name']}"
-                        )
+                    if self.chat_bot and user_name.lower() == self.config.target_channel.lower():
+                        self.chat_bot.send_message(f"Stream is now live: {streams[user_name]['title']} - playing {streams[user_name]['game_name']}")
 
         return notifications
 
@@ -280,15 +252,13 @@ class ZeddyBot(commands.Bot):
         self.config = config
         self.twitch_api = TwitchAPI(config)
         self.twitch_chat_bot = TwitchChatBot(config, self.twitch_api)
-        self.notification_manager = StreamNotificationManager(
-            self.twitch_api, config, self.twitch_chat_bot
-        )
+        self.notification_manager = StreamNotificationManager(self.twitch_api, config, self.twitch_chat_bot)
 
         self.CHANNEL_ID = 966493808869138442
         self.LIVE_ROLE_ID = 983061320133922846
         self.DRIFTERS_ROLE_ID = 1347960879500755066
         self.OUTLAW_ROLE_ID = 1010279216018903061
-        
+
         # timestamps for tracking role upgrades
         self.user_join_timestamps = {}
 
@@ -298,6 +268,7 @@ class ZeddyBot(commands.Bot):
         """
         Some boilerplate commands and events
         """
+
         @self.command()
         async def ping(ctx):
             await ctx.send("Pong!")
@@ -322,9 +293,7 @@ class ZeddyBot(commands.Bot):
 
         @self.event
         async def on_ready():
-            print(
-                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is connected to Discord----------"
-            )
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is connected to Discord----------")
             self.update_token_task.start()
             self.update_bot_token_task.start()
             self.check_twitch_online_streamers.start()
@@ -353,13 +322,13 @@ class ZeddyBot(commands.Bot):
         promote member to Outlaws role after 30 days
         """
         await asyncio.sleep(days * 24 * 60 * 60)  # Convert days to seconds
-        
+
         # check if member is still in the server
         guild = member.guild
         updated_member = guild.get_member(member.id)
         if not updated_member:
             return
-            
+
         # upgrade to Outlaws role
         outlaw_role = guild.get_role(self.OUTLAW_ROLE_ID)
         if outlaw_role:
@@ -367,51 +336,31 @@ class ZeddyBot(commands.Bot):
             print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Upgraded {updated_member.name} to Outlaws after {days} days----------")
 
     async def _handle_live_role_update(self, before, after):
-        print(
-            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is checking for roles----------"
-        )
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is checking for roles----------")
 
-        is_streaming = any(
-            a for a in after.activities if a.type == discord.ActivityType.streaming
-        )
+        is_streaming = any(a for a in after.activities if a.type == discord.ActivityType.streaming)
         has_live_role = self.LIVE_ROLE_ID in after._roles
 
         if is_streaming and not has_live_role:
-            print(
-                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Giving LIVE role to {after.name}----------"
-            )
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Giving LIVE role to {after.name}----------")
             await after.add_roles(after.guild.get_role(self.LIVE_ROLE_ID))
 
             # send message to Twitch chat that stream is starting
-            if (
-                hasattr(after, "name")
-                and after.name.lower() == self.config.target_channel.lower()
-            ):
-                self.twitch_chat_bot.send_message(
-                    f"Discord status updated to streaming! Welcome everyone!"
-                )
+            if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
+                self.twitch_chat_bot.send_message(f"Discord status updated to streaming! Welcome everyone!")
 
         elif not is_streaming and has_live_role:
-            print(
-                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Removing LIVE role from {after.name}----------"
-            )
+            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Removing LIVE role from {after.name}----------")
             await after.remove_roles(after.guild.get_role(self.LIVE_ROLE_ID))
 
             # send message to Twitch chat that stream is ending
-            if (
-                hasattr(after, "name")
-                and after.name.lower() == self.config.target_channel.lower()
-            ):
-                self.twitch_chat_bot.send_message(
-                    "Stream appears to be ending. Thanks for watching!"
-                )
+            if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
+                self.twitch_chat_bot.send_message("Stream appears to be ending. Thanks for watching!")
 
     @loop(hours=24 * 5)
     async def update_token_task(self):
         acc_tok = self.twitch_api.get_app_access_token()
-        print(
-            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Changing access token----------"
-        )
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Changing access token----------")
         self.config.access_token = acc_tok
         self.config.save()
         await self.change_presence(status=discord.Status.online)
@@ -435,9 +384,7 @@ class ZeddyBot(commands.Bot):
             await self._send_stream_notification(channel, notification)
 
     async def _send_stream_notification(self, channel, notification):
-        print(
-            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Sending discord notification----------"
-        )
+        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Sending discord notification----------")
 
         embed = discord.Embed(
             title=f"{notification['user_name']} is live on Twitch",
@@ -452,9 +399,7 @@ class ZeddyBot(commands.Bot):
             icon_url=f"https://avatar.glue-bot.xyz/twitch/{notification['user_login']}",
         )
 
-        embed.set_thumbnail(
-            url=f"https://avatar-resolver.vercel.app/twitch-boxart/{notification['game_name']}"
-        )
+        embed.set_thumbnail(url=f"https://avatar-resolver.vercel.app/twitch-boxart/{notification['game_name']}")
 
         embed.add_field(
             name="",

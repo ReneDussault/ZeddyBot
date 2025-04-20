@@ -114,4 +114,4 @@ python zeddybot.py
 
 ## License
 
-[MIT License]([LICENSE](https://github.com/ReneDussault/ZeddyBot/blob/main/LICENSE.txt))
+![MIT License]([LICENSE](https://github.com/ReneDussault/ZeddyBot/blob/main/LICENSE.txt))

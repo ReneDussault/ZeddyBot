@@ -372,12 +372,14 @@ class ZeddyBot(commands.Bot):
 
         @self.listen("on_member_update")
         async def update_live_role_member(before, after):
-            await self._handle_live_role_update(before, after, event_type="on_member_update")
+            await self.log_activity_changes(before, after)
+            await self._handle_live_role_update(before, after)
 
 
         @self.listen("on_presence_update")
         async def update_live_role_presence(before, after):
-            await self._handle_live_role_update(before, after, event_type="on_presence_update")
+            await self.log_activity_changes(before, after)
+            await self._handle_live_role_update(before, after)
 
 
         @self.event
@@ -395,21 +397,26 @@ class ZeddyBot(commands.Bot):
                 # role upgrade after 30 days
                 self.loop.create_task(self._upgrade_role_after_delay(member))
 
-    
-    async def _handle_live_role_update(self, before, after, event_type="unknown"):
 
-        if event_type == "on_presence_update":
-            if before.status == discord.Status.offline and after.status != discord.Status.offline:
-                self.log_once(f"[{now()}] User '{after.name}' has come online.")
+    async def log_activity_changes(self, before, after):
+        before_activities = set((a.type, getattr(a, 'name', None)) for a in before.activities)
+        after_activities = set((a.type, getattr(a, 'name', None)) for a in after.activities)
 
-            elif before.status != discord.Status.offline and after.status == discord.Status.offline:
-                self.log_once(f"[{now()}] User '{after.name}' has gone offline.")
+        started = after_activities - before_activities
+        stopped = before_activities - after_activities
 
-            else:
-                self.log_once(f"[{now()}] User '{after.name}' updated their presence (status: {after.status})")
+        for act_type, act_name in started:
+            self.log_once(f"[{now()}] User '{after.name}' started activity: {act_type.name} ({act_name})")
+        for act_type, act_name in stopped:
+            self.log_once(f"[{now()}] User '{after.name}' stopped activity: {act_type.name} ({act_name})")
 
-        elif event_type == "on_member_update":
-            self.log_once(f"[{now()}] User '{after.name}' had their member info updated")
+        if before.status == discord.Status.offline and after.status != discord.Status.offline:
+            self.log_once(f"[{now()}] User '{after.name}' has come online.")
+        elif before.status != discord.Status.offline and after.status == discord.Status.offline:
+            self.log_once(f"[{now()}] User '{after.name}' has gone offline.")
+
+        
+    async def _handle_live_role_update(self, before, after):
         
         is_streaming = any(a for a in after.activities if a.type == discord.ActivityType.streaming)
         has_live_role = self.LIVE_ROLE_ID in after._roles

@@ -12,6 +12,13 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
   - Connects to a specified Twitch channel as a bot
   - Can send automated messages when streams start/end
   - Supports sending custom messages from Discord to Twitch chat
+- **Clear Logging**: Human-friendly log messages for user activity and bot actions
+
+## Recent Improvements
+
+- Improved log messages for user presence and role changes (now more human-readable)
+- Reduced duplicate Twitch token refreshes at startup
+- Added a reusable timestamp helper for consistent log formatting
 
 ## Screenshots
 

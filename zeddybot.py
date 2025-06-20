@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import requests
 import discord
@@ -8,6 +8,14 @@ from discord.ext import commands
 from discord.ext.tasks import loop
 import socket
 import asyncio
+from typing import Optional
+import logging
+
+logging.getLogger("discord").setLevel(logging.WARNING)
+
+
+def now():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 
 class Config:
@@ -22,73 +30,91 @@ class Config:
         with open("config.json", "w") as f:
             json.dump(self.data, f)
 
+
     @property
     def discord_token(self):
         return self.data["disc_token"]
+
 
     @property
     def twitch_client_id(self):
         return self.data["twitch_client_id"]
 
+
     @property
     def twitch_secret(self):
         return self.data["twitch_secret"]
+
 
     @property
     def access_token(self):
         return self.data["access_token"]
 
+
     @access_token.setter
     def access_token(self, value):
         self.data["access_token"] = value
+
 
     @property
     def watchlist(self):
         return self.data["watchlist"]
 
+
     @property
     def twitch_bot_username(self):
         return self.data.get("twitch_bot_username", "Zeddy_bot")
+
 
     @property
     def twitch_bot_access_token(self):
         return self.data.get("twitch_bot_access_token", "")
 
+
     @twitch_bot_access_token.setter
     def twitch_bot_access_token(self, value):
         self.data["twitch_bot_access_token"] = value
+
 
     @property
     def twitch_bot_refresh_token(self):
         return self.data.get("twitch_bot_refresh_token", "")
 
+
     @twitch_bot_refresh_token.setter
     def twitch_bot_refresh_token(self, value):
         self.data["twitch_bot_refresh_token"] = value
+
 
     @property
     def target_channel(self):
         return self.data.get("target_channel", "")
 
+
     @property
     def twitch_bot_client_id(self):
         return self.data.get("twitch_bot_client_id", "")
+
 
     @property
     def twitch_bot_secret(self):
         return self.data.get("twitch_bot_secret", "")
 
+
     @property
     def discord_channel_id(self):
         return self.data.get("discord_channel_id", "")
+
 
     @property
     def discord_live_role_id(self):
         return self.data.get("discord_live_role_id", "")
 
+
     @property
     def discord_drifters_role_id(self): 
         return self.data.get("discord_drifters_role_id", "")
+
 
     @property
     def discord_outlaws_role_id(self):
@@ -97,6 +123,7 @@ class Config:
 class TwitchAPI:
     def __init__(self, config: Config):
         self.config = config
+
 
     def get_app_access_token(self):
         params = {
@@ -107,7 +134,9 @@ class TwitchAPI:
         response = requests.post("https://id.twitch.tv/oauth2/token", params=params)
         return response.json()["access_token"]
 
+
     def refresh_bot_token(self):
+
         if not self.config.twitch_bot_refresh_token:
             print("No refresh token available for bot account")
             return False
@@ -126,7 +155,7 @@ class TwitchAPI:
                 self.config.twitch_bot_access_token = data["access_token"]
                 self.config.twitch_bot_refresh_token = data["refresh_token"]
                 self.config.save()
-                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Refreshed bot access token----------")
+                print(f"[{now()}] Refreshed bot access token ")
                 return True
             else:
                 print(f"Failed to refresh bot token: {response.text}")
@@ -134,6 +163,7 @@ class TwitchAPI:
         except Exception as e:
             print(f"Error refreshing bot token: {e}")
             return False
+
 
     def get_users(self, login_names):
         params = {"login": login_names}
@@ -143,6 +173,7 @@ class TwitchAPI:
         }
         response = requests.get("https://api.twitch.tv/helix/users", params=params, headers=headers)
         return {entry["login"]: entry["id"] for entry in response.json()["data"]}
+
 
     def get_streams(self, users):
         params = {"user_id": users.values()}
@@ -163,10 +194,12 @@ class TwitchChatBot:
         self.socket = None
         self.connected = False
 
+
     def connect(self):
+
         try:
             # try to refresh the token first
-            self.twitch_api.refresh_bot_token()
+            # self.twitch_api.refresh_bot_token()
 
             self.socket = socket.socket()
             self.socket.connect((self.server, self.port))
@@ -177,9 +210,9 @@ class TwitchChatBot:
             self.socket.send(f"JOIN #{self.config.target_channel}\r\n".encode("utf-8"))
 
             # set socket to non-blocking
-            self.socket.setblocking(0)
+            self.socket.setblocking(False)
             self.connected = True
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Connected to Twitch chat as {self.config.twitch_bot_username}----------")
+            print(f"[{now()}] Connected to Twitch chat as {self.config.twitch_bot_username} ")
 
             # send initial message to confirm bot is working
             self.send_message("ZeddyBot is now active in chat!")
@@ -190,6 +223,7 @@ class TwitchChatBot:
             self.connected = False
             return False
 
+
     def disconnect(self):
         if self.socket:
             try:
@@ -199,22 +233,26 @@ class TwitchChatBot:
                 pass
         self.connected = False
 
+
     def send_message(self, message):
-        if not self.connected:
+        if not self.connected or self.socket is None:
             if not self.connect():
                 return False
 
         try:
+            if not self.connected or self.socket is None:
+                return
             self.socket.send(f"PRIVMSG #{self.config.target_channel} :{message}\r\n".encode("utf-8"))
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Sent message to Twitch chat: {message}----------")
+            print(f"[{now()}] Sent message to Twitch chat: {message} ")
             return True
         except Exception as e:
             print(f"Error sending message to Twitch chat: {e}")
             self.connected = False
             return False
 
+
     def check_for_ping(self):
-        if not self.connected:
+        if not self.connected or self.socket is None:
             return
 
         try:
@@ -228,11 +266,12 @@ class TwitchChatBot:
 
 
 class StreamNotificationManager:
-    def __init__(self, twitch_api: TwitchAPI, config: Config, chat_bot: TwitchChatBot = None):
+    def __init__(self, twitch_api: TwitchAPI, config: Config, chat_bot: Optional[TwitchChatBot] = None):
         self.twitch_api = twitch_api
         self.config = config
         self.chat_bot = chat_bot
         self.online_users = {}
+
 
     def get_notifications(self):
         users = self.twitch_api.get_users(self.config.watchlist)
@@ -241,7 +280,7 @@ class StreamNotificationManager:
         notifications = []
         for user_name in self.config.watchlist:
             if user_name not in self.online_users:
-                self.online_users[user_name] = datetime.utcnow()
+                self.online_users[user_name] = datetime.now(timezone.utc)
 
             if user_name not in streams:
                 self.online_users[user_name] = None
@@ -279,6 +318,7 @@ class ZeddyBot(commands.Bot):
 
         self.setup()
 
+
     def setup(self):
         """
         Some boilerplate commands and events
@@ -288,9 +328,11 @@ class ZeddyBot(commands.Bot):
         async def ping(ctx):
             await ctx.send("Pong!")
 
+
         @self.command()
         async def hello(ctx):
             await ctx.send(f"Hello {ctx.author.name}!")
+
 
         @self.command()
         async def twitch_chat(ctx, *, message):
@@ -299,6 +341,7 @@ class ZeddyBot(commands.Bot):
             else:
                 await ctx.send("Failed to send message to Twitch chat.")
 
+
         @self.command()
         async def refresh_bot_token(ctx):
             if self.twitch_api.refresh_bot_token():
@@ -306,9 +349,12 @@ class ZeddyBot(commands.Bot):
             else:
                 await ctx.send("Failed to refresh the bot's Twitch token.")
 
+
         @self.event
         async def on_ready():
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is connected to Discord----------")
+
+            print(f"[{now()}] ZeddyBot is connected to Discord ")
+            
             self.update_token_task.start()
             self.update_bot_token_task.start()
             self.check_twitch_online_streamers.start()
@@ -316,24 +362,64 @@ class ZeddyBot(commands.Bot):
 
             self.twitch_chat_bot.connect()
 
+
         @self.listen("on_member_update")
+        async def update_live_role_member(before, after):
+            await self._handle_live_role_update(before, after, event_type="on_member_update")
+
+
         @self.listen("on_presence_update")
-        async def update_live_role(before, after):
-            await self._handle_live_role_update(before, after)
+        async def update_live_role_presence(before, after):
+            await self._handle_live_role_update(before, after, event_type="on_presence_update")
+
 
         @self.event
         async def on_member_join(member):
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------{member} has joined the server----------")
+
+            print(f"[{now()}] {member} has joined the server ")
             
             # drifters role
             has_drifter_role = self.DRIFTERS_ROLE_ID in member.roles
             
             if not has_drifter_role:
                 await member.add_roles(member.guild.get_role(int(self.DRIFTERS_ROLE_ID)))
-                print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Added Drifters role to {member}----------")
+                print(f"[{now()}] Added Drifters role to {member} ")
 
                 # role upgrade after 30 days
                 self.loop.create_task(self._upgrade_role_after_delay(member))
+
+    
+    async def _handle_live_role_update(self, before, after, event_type="unknown"):
+
+        if event_type == "on_presence_update":
+            if before.status == discord.Status.offline and after.status != discord.Status.offline:
+                print(f"[{now()}] User '{after.name}' has come online.")
+            elif before.status != discord.Status.offline and after.status == discord.Status.offline:
+                print(f"[{now()}] User '{after.name}' has gone offline.")
+            else:
+                print(f"[{now()}] User '{after.name}' updated their presence (status: {after.status}).")
+        elif event_type == "on_member_update":
+            print(f"[{now()}] User '{after.name}' had their member info updated.")
+        
+        is_streaming = any(a for a in after.activities if a.type == discord.ActivityType.streaming)
+        has_live_role = self.LIVE_ROLE_ID in after._roles
+
+        if is_streaming and not has_live_role:
+            print(f"[{now()}] Giving LIVE role to {after.name} ")
+            await after.add_roles(after.guild.get_role(self.LIVE_ROLE_ID))
+
+            # send message to Twitch chat that stream is starting
+            if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
+                self.twitch_chat_bot.send_message(f"Discord status updated to streaming! Welcome everyone!")
+
+        elif not is_streaming and has_live_role:
+            print(f"[{now()}] Removing LIVE role from {after.name} ")
+            await after.remove_roles(after.guild.get_role(self.LIVE_ROLE_ID))
+
+            # send message to Twitch chat that stream is ending
+            if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
+                self.twitch_chat_bot.send_message("Stream appears to be ending. Thanks for watching!")
+
 
     async def _upgrade_role_after_delay(self, member, days=30):
         """
@@ -352,45 +438,29 @@ class ZeddyBot(commands.Bot):
         if not has_outlaw_role:
             await updated_member.add_roles(updated_member.guild.get_role(int(self.OUTLAWS_ROLE_ID)))
             await updated_member.remove_roles(updated_member.guild.get_role(int(self.DRIFTERS_ROLE_ID)))
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Upgraded {updated_member.name} to Outlaws after {days} days----------")
+            print(f"[{now()}] Upgraded {updated_member.name} to Outlaws after {days} days ")
 
-    async def _handle_live_role_update(self, before, after):
-        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is checking for roles----------")
-
-        is_streaming = any(a for a in after.activities if a.type == discord.ActivityType.streaming)
-        has_live_role = self.LIVE_ROLE_ID in after._roles
-
-        if is_streaming and not has_live_role:
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Giving LIVE role to {after.name}----------")
-            await after.add_roles(after.guild.get_role(self.LIVE_ROLE_ID))
-
-            # send message to Twitch chat that stream is starting
-            if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
-                self.twitch_chat_bot.send_message(f"Discord status updated to streaming! Welcome everyone!")
-
-        elif not is_streaming and has_live_role:
-            print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------ZeddyBot is Removing LIVE role from {after.name}----------")
-            await after.remove_roles(after.guild.get_role(self.LIVE_ROLE_ID))
-
-            # send message to Twitch chat that stream is ending
-            if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
-                self.twitch_chat_bot.send_message("Stream appears to be ending. Thanks for watching!")
 
     @loop(hours=24 * 5)
     async def update_token_task(self):
         acc_tok = self.twitch_api.get_app_access_token()
-        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Changing access token----------")
+
+        print(f"[{now()}] Changing access token ")
+        
         self.config.access_token = acc_tok
         self.config.save()
         await self.change_presence(status=discord.Status.online)
+
 
     @loop(hours=24)
     async def update_bot_token_task(self):
         self.twitch_api.refresh_bot_token()
 
+
     @loop(minutes=5)
     async def check_twitch_ping(self):
         self.twitch_chat_bot.check_for_ping()
+
 
     @loop(seconds=60)
     async def check_twitch_online_streamers(self):
@@ -402,8 +472,10 @@ class ZeddyBot(commands.Bot):
         for notification in notifications:
             await self._send_stream_notification(channel, notification)
 
+
     async def _send_stream_notification(self, channel, notification):
-        print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}----------Sending discord notification----------")
+
+        print(f"[{now()}] Sending discord notification ")
 
         embed = discord.Embed(
             title=f"{notification['user_name']} is live on Twitch",

@@ -23,16 +23,19 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
 ## Screenshots
 
 ### Stream Notification
-![Stream Notification](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot%202023-02-07%20205438.png)
+![Stream Notification](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/notif.png)
 
 ### Bot Console
-![Bot Console](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot_from_2023-02-07_21-56-48.png)
+![Bot Console](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/terminal.png)
 
 ### Role Management
-![Role Management](https://github.com/ReneDussault/ZeddyBot/blob/main/Screenshot_from_2023-02-07_21-34-15.png)
+![Role Management](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/live_role.png)
 
 ### Live Role Display
-![Live Role](https://github.com/ReneDussault/ZeddyBot/blob/main/live.bmp)
+![Live Role](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/live.bmp)
+
+### Dashboard
+![Dachboard](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/dashboard.png)
 
 ## Setup
 

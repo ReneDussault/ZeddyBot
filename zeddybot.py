@@ -390,16 +390,25 @@ class ZeddyBot(commands.Bot):
 
     
     async def _handle_live_role_update(self, before, after, event_type="unknown"):
+        printed_online = False
+        printed_offline = False
+        printed_update = False
 
         if event_type == "on_presence_update":
             if before.status == discord.Status.offline and after.status != discord.Status.offline:
                 print(f"[{now()}] User '{after.name}' has come online.")
+                printed_online = True
+
             elif before.status != discord.Status.offline and after.status == discord.Status.offline:
                 print(f"[{now()}] User '{after.name}' has gone offline.")
+                printed_offline = True
+
             else:
-                print(f"[{now()}] User '{after.name}' updated their presence (status: {after.status}).")
+                print(f"[{now()}] User '{after.name}' updated their presence (status: {after.status})")
+                printed_update = True
+
         elif event_type == "on_member_update":
-            print(f"[{now()}] User '{after.name}' had their member info updated.")
+            print(f"[{now()}] User '{after.name}' had their member info updated")
         
         is_streaming = any(a for a in after.activities if a.type == discord.ActivityType.streaming)
         has_live_role = self.LIVE_ROLE_ID in after._roles

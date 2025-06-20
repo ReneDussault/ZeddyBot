@@ -303,6 +303,7 @@ class ZeddyBot(commands.Bot):
         intents.members = True
         super().__init__(command_prefix="!", intents=intents)
 
+        self._last_log_line = None
         self.config = config
         self.twitch_api = TwitchAPI(config)
         self.twitch_chat_bot = TwitchChatBot(config, self.twitch_api)
@@ -317,6 +318,12 @@ class ZeddyBot(commands.Bot):
         self.user_join_timestamps = {}
 
         self.setup()
+
+
+    def log_once(self, message):
+        if getattr(self, "_last_log_line", None) != message:
+            print(message)
+            self._last_log_line = message
 
 
     def setup(self):
@@ -390,25 +397,19 @@ class ZeddyBot(commands.Bot):
 
     
     async def _handle_live_role_update(self, before, after, event_type="unknown"):
-        printed_online = False
-        printed_offline = False
-        printed_update = False
 
         if event_type == "on_presence_update":
             if before.status == discord.Status.offline and after.status != discord.Status.offline:
-                print(f"[{now()}] User '{after.name}' has come online.")
-                printed_online = True
+                self.log_once(f"[{now()}] User '{after.name}' has come online.")
 
             elif before.status != discord.Status.offline and after.status == discord.Status.offline:
-                print(f"[{now()}] User '{after.name}' has gone offline.")
-                printed_offline = True
+                self.log_once(f"[{now()}] User '{after.name}' has gone offline.")
 
             else:
-                print(f"[{now()}] User '{after.name}' updated their presence (status: {after.status})")
-                printed_update = True
+                self.log_once(f"[{now()}] User '{after.name}' updated their presence (status: {after.status})")
 
         elif event_type == "on_member_update":
-            print(f"[{now()}] User '{after.name}' had their member info updated")
+            self.log_once(f"[{now()}] User '{after.name}' had their member info updated")
         
         is_streaming = any(a for a in after.activities if a.type == discord.ActivityType.streaming)
         has_live_role = self.LIVE_ROLE_ID in after._roles

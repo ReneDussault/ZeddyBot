@@ -4,21 +4,27 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
 
 ## Features
 
-- **Twitch Stream Notifications**: Posts embedded notifications in a Discord channel when streamers from your watchlist go live
-- **Discord Role Management**: 
+- **Web Dashboard**
+  - Live stream and bot status overview
+  - View stream history and Discord stats
+  - Send messages directly to Twitch chat from your browser (using your twitch bot account)
+  - Modern, responsive UI
+
+- **Twitch Stream Notifications**
+  - Embedded notifications in a Discord channel when streamers go live
+  - Stream history tracking (last 10 streams)
+
+- **Discord Role Management**
   - Automatically assigns a "LIVE" role to Discord members who are streaming
   - Role progression system (Drifters → Outlaws after 30 days)
-- **Twitch Chat Integration**: 
+
+- **Twitch Chat Integration**
   - Connects to a specified Twitch channel as a bot
-  - Can send automated messages when streams start/end
-  - Supports sending custom messages from Discord to Twitch chat
-- **Clear Logging**: Human-friendly log messages for user activity and bot actions
+  - Sends automated messages when streams start/end
+  - Supports sending custom messages from Discord or the dashboard to Twitch chat
 
-## Recent Improvements
-
-- Improved log messages for user presence and role changes (now more human-readable)
-- Reduced duplicate Twitch token refreshes at startup
-- Added a reusable timestamp helper for consistent log formatting
+- **Clear Logging**
+  - Human-friendly, non-repetitive log messages for user activity and bot actions
 
 ## Screenshots
 
@@ -37,6 +43,9 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
 ### Dashboard
 ![Dachboard](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/dashboard.png)
 
+### Twitch Integration
+![Twitch](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/twitch.png)
+
 ## Setup
 
 ### Prerequisites
@@ -44,6 +53,7 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
 - Discord Bot Token
 - Twitch API Client ID and Secret
 - Twitch Bot Account (optional for chat integration)
+- Flask for the dashboard
 
 ### Installation
 
@@ -79,14 +89,19 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
    }
    ```
 
-### Running the Bot
+4. Start the bot:
+    ```
+    python zeddybot.py
+    ```
 
-```
-python zeddybot.py
-```
+5. Start the dashboard (in a separate terminal):
+    ```
+    python dashboard.py
+    ```
+    Then open [http://localhost:5000](http://localhost:5000) in your browser.
 
 ## Commands
-
+In your discord's specific channel configured in the config.json, you can:
 - `!ping` - Test command that responds with "Pong!"
 - `!hello` - Greets the user
 - `!twitch_chat [message]` - Sends a message to the configured Twitch chat
@@ -114,13 +129,6 @@ python zeddybot.py
 - `twitch_bot_access_token`: Will be automatically populated
 - `twitch_bot_refresh_token`: Will be automatically populated
 - `target_channel`: Twitch channel for the bot to join
-
-## Future Development
-
-- Adding more interactive chat commands
-- Implementing chatbot functionality
-- Code refactoring for improved structure and readability
-- Enhanced documentation and examples
 
 ## License
 

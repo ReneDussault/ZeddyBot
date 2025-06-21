@@ -12,5 +12,10 @@
     "twitch_bot_access_token": "twitchbotsecret",
     "twitch_bot_refresh_token": "twitchbotrefreshtoken",
     "twitch_bot_secret": "twitchbotsecret",
-    "target_channel": "yourchannelname"
+    "target_channel": "yourchannelname",
+    "obs": {
+        "host": "yourobswebsocketip",
+        "port": 4455,
+        "password": "yourobspassword"
+    }
 }

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,7 +34,7 @@
             color: white;
             font-size: 2.5rem;
             font-weight: 700;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         .grid {
@@ -48,8 +49,8 @@
             backdrop-filter: blur(10px);
             border-radius: 15px;
             padding: 1.5rem;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .card h2 {
@@ -66,9 +67,17 @@
             margin-right: 8px;
         }
 
-        .status-live { background: #48bb78; }
-        .status-offline { background: #e53e3e; }
-        .status-connected { background: #38b2ac; }
+        .status-live {
+            background: #48bb78;
+        }
+
+        .status-offline {
+            background: #e53e3e;
+        }
+
+        .status-connected {
+            background: #38b2ac;
+        }
 
         .stream-info {
             background: linear-gradient(135deg, #9146ff, #772ce8);
@@ -84,7 +93,7 @@
             justify-content: space-between;
             margin: 0.5rem 0;
             padding: 0.5rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .stat-row:last-child {
@@ -186,8 +195,15 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
         }
 
         .loading {
@@ -195,6 +211,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
@@ -280,11 +297,11 @@
             try {
                 const response = await fetch('/api/status');
                 const data = await response.json();
-                
+
                 // Update stream status
                 const streamStatus = document.getElementById('stream-status');
                 const streamLive = document.getElementById('stream-live');
-                
+
                 if (data.stream.live) {
                     streamStatus.className = 'status-indicator status-live';
                     streamLive.textContent = 'LIVE';
@@ -298,7 +315,7 @@
                     document.getElementById('stream-game').textContent = '-';
                     document.getElementById('stream-viewers').textContent = '0';
                 }
-                
+
                 // Update watchlist
                 const watchlist = document.getElementById('watchlist');
                 watchlist.innerHTML = '';
@@ -308,66 +325,66 @@
                     item.textContent = channel;
                     watchlist.appendChild(item);
                 });
-                
+
                 // Update last update time
                 document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-                
+
                 // Load stream history
                 await loadHistory();
-                
+
             } catch (error) {
                 console.error('Error loading data:', error);
             }
         }
-        
+
         async function loadHistory() {
             try {
                 const response = await fetch('/api/history');
                 const history = await response.json();
-                
+
                 const historyContainer = document.getElementById('stream-history');
                 historyContainer.innerHTML = '';
-                
+
                 if (history.length === 0) {
                     historyContainer.innerHTML = '<div class="history-item"><div class="history-title">No recent streams</div></div>';
                     return;
                 }
-                
+
                 history.slice(-5).reverse().forEach(stream => {
                     const item = document.createElement('div');
                     item.className = 'history-item';
-                    
+
                     const startTime = new Date(stream.started_at + 'Z').toLocaleString();
-                    
+
                     item.innerHTML = `
                         <div class="history-title">${stream.title || 'Untitled Stream'}</div>
                         <div class="history-meta">${stream.game || 'No Game'} • ${startTime}</div>
                     `;
-                    
+
                     historyContainer.appendChild(item);
                 });
-                
+
             } catch (error) {
                 console.error('Error loading history:', error);
             }
         }
-        
+
         async function sendChatMessage() {
             const input = document.getElementById('chat-message');
             const response = document.getElementById('chat-response');
             const message = input.value.trim();
-            
+
             if (!message) return;
-            
+
             try {
                 const result = await fetch('/api/send_chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message })
                 });
-                
+
                 const data = await result.json();
-                
+
                 if (data.success) {
                     response.style.color = '#48bb78';
                     response.textContent = '✓ Message sent successfully';
@@ -376,28 +393,29 @@
                     response.style.color = '#e53e3e';
                     response.textContent = '✗ ' + (data.error || 'Failed to send message');
                 }
-                
+
                 setTimeout(() => response.textContent = '', 3000);
-                
+
             } catch (error) {
                 response.style.color = '#e53e3e';
                 response.textContent = '✗ Connection error';
                 setTimeout(() => response.textContent = '', 3000);
             }
         }
-        
+
         // Allow Enter key to send chat message
-        document.getElementById('chat-message').addEventListener('keypress', function(e) {
+        document.getElementById('chat-message').addEventListener('keypress', function (e) {
             if (e.key === 'Enter') {
                 sendChatMessage();
             }
         });
-        
+
         // Load data on page load
         loadData();
-        
+
         // Auto refresh every 30 seconds
         setInterval(loadData, 30000);
     </script>
 </body>
+
 </html>

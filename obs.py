@@ -2,12 +2,20 @@
 
 import obsws_python as obs
 import socket
+import json
 
 
 def test_connection():
-    OBS_HOST = '10.0.0.219'
-    OBS_PORT = 4455
-    OBS_PASSWORD = '123456'
+    config_path = "config.json"
+
+    with open(config_path) as f:
+            config = json.load(f)
+            
+    obs_config = config.get('obs', {})
+
+    OBS_HOST = obs_config.get('host', 'localhost')
+    OBS_PORT = obs_config.get('port', 4455)
+    OBS_PASSWORD = obs_config.get('password', '')
     
     print("=== OBS Connection Debug ===")
     print(f"Testing connection to {OBS_HOST}:{OBS_PORT}")

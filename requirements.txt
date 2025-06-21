@@ -1,3 +1,4 @@
-discord.py>=2.0.0
-requests>=2.27.1
-flask>=2.0.1
+discord.py==2.5.2
+Flask==3.1.1
+obsws-python==1.7.2
+requests==2.32.4

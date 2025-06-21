@@ -158,22 +158,6 @@
             margin-top: 0.25rem;
         }
 
-        .watchlist {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            margin-top: 0.5rem;
-        }
-
-        .watchlist-item {
-            background: linear-gradient(135deg, #48bb78, #38a169);
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-
         .refresh-btn {
             position: fixed;
             bottom: 2rem;
@@ -212,6 +196,7 @@
     </style>
 </head>
 
+
 <body>
     <div class="container">
         <div class="header">
@@ -224,18 +209,22 @@
                     <span class="status-indicator" id="stream-status"></span>
                     Stream Status
                 </h2>
+
                 <div class="stat-row">
                     <span>Status:</span>
                     <span id="stream-live">Checking...</span>
                 </div>
+
                 <div class="stat-row">
                     <span>Title:</span>
                     <span id="stream-title">-</span>
                 </div>
+
                 <div class="stat-row">
                     <span>Game:</span>
                     <span id="stream-game">-</span>
                 </div>
+
                 <div class="stat-row">
                     <span>Viewers:</span>
                     <span id="stream-viewers">0</span>
@@ -247,14 +236,17 @@
                     <span class="status-indicator status-connected"></span>
                     Bot Status
                 </h2>
+
                 <div class="stat-row">
                     <span>Discord:</span>
                     <span id="discord-status">Connected</span>
                 </div>
+
                 <div class="stat-row">
                     <span>Twitch Chat:</span>
                     <span id="twitch-status">Connected</span>
                 </div>
+
                 <div class="stat-row">
                     <span>Last Update:</span>
                     <span id="last-update">-</span>
@@ -269,15 +261,38 @@
                 </div>
                 <div id="chat-response" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
             </div>
-
-            <div class="card">
-                <h2>Watchlist</h2>
-                <div class="watchlist" id="watchlist">
-                    <div class="watchlist-item loading">Loading...</div>
-                </div>
-            </div>
         </div>
 
+        <div id="chat-messages"
+            style="height: 300px; max-height: 300px; overflow-y: auto; margin-bottom: 1rem; padding: 1rem; background: linear-gradient(135deg, #1a1446 0%, #2d0036 100%); border-radius: 8px; box-shadow: 0 2px 8px rgba(255,0,255,0.15); border: 1.5px solid #ff00cc;">
+            <script>
+                function updateChat() {
+                    fetch('/api/chat')
+                        .then(response => response.json())
+                        .then(messages => {
+                            const chatDiv = document.getElementById('chat-messages');
+                            // Save scroll position
+                            const isNearTop = chatDiv.scrollTop < 60;
+
+                            chatDiv.innerHTML = '';
+                            messages.slice().reverse().forEach(msg => {
+                                const msgDiv = document.createElement('div');
+                                msgDiv.innerHTML = `<span style="color:#ffe066;">[${msg.timestamp}]</span> <strong style="color:#00fff7;">${msg.username}:</strong> <span style="color:#ff61f6;">${msg.message}</span>`;
+                                chatDiv.appendChild(msgDiv);
+                            });
+
+                            // Only scroll to top if user is near the top
+                            if (isNearTop) {
+                                chatDiv.scrollTop = 0;
+                            }
+                        })
+                        .catch(err => console.error('Chat update error:', err));
+                }
+
+                setInterval(updateChat, 2000);
+                updateChat();
+            </script>
+        </div>
         <div class="card">
             <h2>Recent Streams</h2>
             <div class="history-list" id="stream-history">
@@ -315,16 +330,6 @@
                     document.getElementById('stream-game').textContent = '-';
                     document.getElementById('stream-viewers').textContent = '0';
                 }
-
-                // Update watchlist
-                const watchlist = document.getElementById('watchlist');
-                watchlist.innerHTML = '';
-                data.watchlist.forEach(channel => {
-                    const item = document.createElement('div');
-                    item.className = 'watchlist-item';
-                    item.textContent = channel;
-                    watchlist.appendChild(item);
-                });
 
                 // Update last update time
                 document.getElementById('last-update').textContent = new Date().toLocaleTimeString();

@@ -243,7 +243,7 @@ class TwitchChatBot:
             if not self.connected or self.socket is None:
                 return
             self.socket.send(f"PRIVMSG #{self.config.target_channel} :{message}\r\n".encode("utf-8"))
-            print(f"[{now()}] Sent message to Twitch chat: {message} ")
+            print(f"[{now()}] Sending to Twitch chat: {message}")
             return True
         except Exception as e:
             print(f"Error sending message to Twitch chat: {e}")

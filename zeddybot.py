@@ -285,7 +285,7 @@ class StreamNotificationManager:
             if user_name not in streams:
                 self.online_users[user_name] = None
             else:
-                started_at = datetime.strptime(streams[user_name]["started_at"], "%Y-%m-%dT%H:%M:%SZ")
+                started_at = datetime.strptime(streams[user_name]["started_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
                 if self.online_users[user_name] is None or started_at > self.online_users[user_name]:
                     notifications.append(streams[user_name])
                     self.online_users[user_name] = started_at
@@ -309,8 +309,8 @@ class ZeddyBot(commands.Bot):
         self.twitch_chat_bot = TwitchChatBot(config, self.twitch_api)
         self.notification_manager = StreamNotificationManager(self.twitch_api, config, self.twitch_chat_bot)
 
-        self.CHANNEL_ID = config.discord_channel_id
-        self.LIVE_ROLE_ID =  config.discord_live_role_id
+        self.CHANNEL_ID = int(config.discord_channel_id) if config.discord_channel_id else None
+        self.LIVE_ROLE_ID = config.discord_live_role_id
         self.DRIFTERS_ROLE_ID = config.discord_drifters_role_id
         self.OUTLAWS_ROLE_ID = config.discord_outlaws_role_id
 
@@ -356,6 +356,90 @@ class ZeddyBot(commands.Bot):
             else:
                 await ctx.send("Failed to refresh the bot's Twitch token.")
 
+        @self.command()
+        async def test_stream_check(ctx):
+            """Debug command to manually test stream detection"""
+            try:
+                users = self.twitch_api.get_users(self.config.watchlist)
+                streams = self.twitch_api.get_streams(users)
+                
+                await ctx.send(f"Watchlist: {self.config.watchlist}")
+                await ctx.send(f"Users found: {users}")
+                await ctx.send(f"Streams found: {list(streams.keys())}")
+                
+                if streams:
+                    for user, stream in streams.items():
+                        await ctx.send(f"Stream: {user} - {stream['title']} - {stream['game_name']}")
+                else:
+                    await ctx.send("No active streams detected")
+                    
+            except Exception as e:
+                await ctx.send(f"Error testing stream check: {e}")
+
+        @self.command()
+        async def force_notification(ctx):
+            """Force send a notification for the current stream"""
+            try:
+                if not self.CHANNEL_ID:
+                    await ctx.send("Discord channel ID not configured")
+                    return
+                    
+                channel = self.get_channel(self.CHANNEL_ID)
+                if not channel:
+                    await ctx.send(f"Could not find Discord channel with ID {self.CHANNEL_ID}")
+                    return
+                
+                # Get actual current stream data
+                users = self.twitch_api.get_users(self.config.watchlist)
+                streams = self.twitch_api.get_streams(users)
+                
+                # Find your stream specifically
+                your_stream = None
+                for user_name in self.config.watchlist:
+                    if user_name.lower() == self.config.target_channel.lower() and user_name in streams:
+                        your_stream = streams[user_name]
+                        break
+                
+                if your_stream:
+                    await self._send_stream_notification(channel, your_stream)
+                    # Only send confirmation if command was used in a different channel
+                    if ctx.channel.id != self.CHANNEL_ID:
+                        await ctx.send("Live stream notification sent!")
+                else:
+                    await ctx.send("You are not currently live on Twitch, so no notification was sent.")
+                
+            except Exception as e:
+                await ctx.send(f"Error sending notification: {e}")
+
+        @self.command()
+        async def test_notification(ctx):
+            """Send a test notification (fake data)"""
+            try:
+                if not self.CHANNEL_ID:
+                    await ctx.send("Discord channel ID not configured")
+                    return
+                    
+                channel = self.get_channel(self.CHANNEL_ID)
+                if not channel:
+                    await ctx.send(f"Could not find Discord channel with ID {self.CHANNEL_ID}")
+                    return
+                
+                # Create a fake notification for testing
+                fake_notification = {
+                    'user_name': 'RenegadeZed',
+                    'user_login': 'renegadezed',
+                    'title': 'Test Stream Notification',
+                    'game_name': 'Test Game',
+                }
+                
+                await self._send_stream_notification(channel, fake_notification)
+                # Only send confirmation if command was used in a different channel
+                if ctx.channel.id != self.CHANNEL_ID:
+                    await ctx.send("Test notification sent!")
+                
+            except Exception as e:
+                await ctx.send(f"Error sending test notification: {e}")
+
 
         @self.event
         async def on_ready():
@@ -383,19 +467,22 @@ class ZeddyBot(commands.Bot):
 
 
         @self.event
-        async def on_member_join(member):
-
-            print(f"[{now()}] {member} has joined the server ")
+        async def on_member_join(self, member):
+            print(f"[{now()}] {member} has joined the server")
             
-            # drifters role
-            has_drifter_role = self.DRIFTERS_ROLE_ID in member.roles
-            
-            if not has_drifter_role:
-                await member.add_roles(member.guild.get_role(int(self.DRIFTERS_ROLE_ID)))
-                print(f"[{now()}] Added Drifters role to {member} ")
-
-                # role upgrade after 30 days
-                self.loop.create_task(self._upgrade_role_after_delay(member))
+            # drifters role - convert to int and validate
+            drifters_role = member.guild.get_role(int(self.DRIFTERS_ROLE_ID))
+            if drifters_role:
+                has_drifter_role = drifters_role in member.roles
+                
+                if not has_drifter_role:
+                    await member.add_roles(drifters_role)
+                    print(f"[{now()}] Added Drifters role to {member}")
+                    
+                    # role upgrade after 30 days
+                    self.loop.create_task(self._upgrade_role_after_delay(member))
+            else:
+                print(f"[{now()}] ERROR: Drifters role with ID {self.DRIFTERS_ROLE_ID} not found!")
 
 
     async def log_activity_changes(self, before, after):
@@ -417,46 +504,59 @@ class ZeddyBot(commands.Bot):
 
         
     async def _handle_live_role_update(self, before, after):
-        
         is_streaming = any(a for a in after.activities if a.type == discord.ActivityType.streaming)
-        has_live_role = self.LIVE_ROLE_ID in after._roles
+        has_live_role = int(self.LIVE_ROLE_ID) in after._roles
 
         if is_streaming and not has_live_role:
-            print(f"[{now()}] Giving LIVE role to {after.name} ")
-            await after.add_roles(after.guild.get_role(self.LIVE_ROLE_ID))
-
-            # send message to Twitch chat that stream is starting
-            if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
-                self.twitch_chat_bot.send_message(f"Discord status updated to streaming! Welcome everyone!")
+            print(f"[{now()}] Giving LIVE role to {after.name}")
+            
+            # Convert to int and validate role exists
+            live_role = after.guild.get_role(int(self.LIVE_ROLE_ID))
+            if live_role:
+                await after.add_roles(live_role)
+                
+                # send message to Twitch chat that stream is starting
+                if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
+                    self.twitch_chat_bot.send_message(f"Discord status updated to streaming! Welcome everyone!")
+            else:
+                print(f"[{now()}] ERROR: Live role with ID {self.LIVE_ROLE_ID} not found!")
 
         elif not is_streaming and has_live_role:
-            print(f"[{now()}] Removing LIVE role from {after.name} ")
-            await after.remove_roles(after.guild.get_role(self.LIVE_ROLE_ID))
-
-            # send message to Twitch chat that stream is ending
-            if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
-                self.twitch_chat_bot.send_message("Stream appears to be ending. Thanks for watching!")
+            print(f"[{now()}] Removing LIVE role from {after.name}")
+            
+            # Convert to int and validate role exists
+            live_role = after.guild.get_role(int(self.LIVE_ROLE_ID))
+            if live_role:
+                await after.remove_roles(live_role)
+                
+                # send message to Twitch chat that stream is ending
+                if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
+                    self.twitch_chat_bot.send_message("Stream appears to be ending. Thanks for watching!")
+            else:
+                print(f"[{now()}] ERROR: Live role with ID {self.LIVE_ROLE_ID} not found!")
 
 
     async def _upgrade_role_after_delay(self, member, days=30):
-        """
-        promote member to Outlaws role after 30 days
-        """
-        await asyncio.sleep(days * 24 * 60 * 60)  # convert days to seconds
-
-        # check if member is still in the server
+        """promote member to Outlaws role after 30 days"""
+        await asyncio.sleep(days * 24 * 60 * 60)
+        
         guild = member.guild
         updated_member = guild.get_member(member.id)
         if not updated_member:
             return
-
-        # promote to Outlaws role
-        has_outlaw_role = self.OUTLAWS_ROLE_ID in member.roles
-        if not has_outlaw_role:
-            await updated_member.add_roles(updated_member.guild.get_role(int(self.OUTLAWS_ROLE_ID)))
-            await updated_member.remove_roles(updated_member.guild.get_role(int(self.DRIFTERS_ROLE_ID)))
-            print(f"[{now()}] Upgraded {updated_member.name} to Outlaws after {days} days ")
-
+        
+        # Convert to int and validate roles exist
+        outlaws_role = guild.get_role(int(self.OUTLAWS_ROLE_ID))
+        drifters_role = guild.get_role(int(self.DRIFTERS_ROLE_ID))
+        
+        if outlaws_role and drifters_role:
+            has_outlaw_role = outlaws_role in updated_member.roles
+            if not has_outlaw_role:
+                await updated_member.add_roles(outlaws_role)
+                await updated_member.remove_roles(drifters_role)
+                print(f"[{now()}] Upgraded {updated_member.name} to Outlaws after {days} days")
+        else:
+            print(f"[{now()}] ERROR: Required roles not found - Outlaws: {self.OUTLAWS_ROLE_ID}, Drifters: {self.DRIFTERS_ROLE_ID}")
 
     @loop(hours=24 * 5)
     async def update_token_task(self):
@@ -481,8 +581,13 @@ class ZeddyBot(commands.Bot):
 
     @loop(seconds=60)
     async def check_twitch_online_streamers(self):
+        if not self.CHANNEL_ID:
+            print(f"[{now()}] Discord channel ID not configured")
+            return
+            
         channel = self.get_channel(self.CHANNEL_ID)
         if not channel:
+            print(f"[{now()}] Could not find Discord channel with ID {self.CHANNEL_ID}")
             return
 
         notifications = self.notification_manager.get_notifications()
@@ -507,7 +612,15 @@ class ZeddyBot(commands.Bot):
             icon_url=f"https://avatar.glue-bot.xyz/twitch/{notification['user_login']}",
         )
 
-        embed.set_thumbnail(url=f"https://avatar-resolver.vercel.app/twitch-boxart/{notification['game_name']}")
+        # Only set thumbnail if game_name exists and is not empty
+        if notification.get('game_name') and notification['game_name'].strip():
+            try:
+                # URL encode the game name to handle special characters
+                import urllib.parse
+                encoded_game = urllib.parse.quote(notification['game_name'])
+                embed.set_thumbnail(url=f"https://avatar-resolver.vercel.app/twitch-boxart/{encoded_game}")
+            except Exception as e:
+                print(f"[{now()}] Warning: Could not set thumbnail for game {notification.get('game_name')}: {e}")
 
         embed.add_field(
             name="",

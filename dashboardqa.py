@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
 import json
 import requests
 from datetime import datetime
@@ -17,6 +18,7 @@ except ImportError:
     ReqClient = None
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 class DashboardData:
     def __init__(self, config_path="config.json"):
@@ -35,6 +37,40 @@ class DashboardData:
     def load_config(self):
         with open(self.config_path) as f:
             self.config = json.load(f)
+
+    def save_config(self):
+        """Save config back to file"""
+        with open(self.config_path, 'w') as f:
+            json.dump(self.config, f, indent=2)
+
+    def refresh_bot_token(self):
+        """Refresh the Twitch bot access token using refresh token"""
+        if not self.config.get('twitch_bot_refresh_token'):
+            print("No refresh token available for bot account")
+            return False
+
+        params = {
+            "client_id": self.config.get('twitch_bot_client_id', ''),
+            "client_secret": self.config.get('twitch_bot_secret', ''),
+            "grant_type": "refresh_token",
+            "refresh_token": self.config['twitch_bot_refresh_token'],
+        }
+
+        try:
+            response = requests.post("https://id.twitch.tv/oauth2/token", params=params)
+            if response.status_code == 200:
+                data = response.json()
+                self.config['twitch_bot_access_token'] = data["access_token"]
+                self.config['twitch_bot_refresh_token'] = data["refresh_token"]
+                self.save_config()
+                print(f"[DASHBOARD] Refreshed bot access token")
+                return True
+            else:
+                print(f"Failed to refresh bot token: {response.text}")
+                return False
+        except Exception as e:
+            print(f"Error refreshing bot token: {e}")
+            return False
 
     def connect_obs(self):
         """Connect to OBS WebSocket v5 using ReqClient"""
@@ -143,6 +179,47 @@ class DashboardData:
                 })
                 self.stream_history = self.stream_history[-10:]
 
+    def test_chat_connection(self):
+        """Test if chat connection credentials are working"""
+        try:
+            if not self.config.get('target_channel'):
+                return False, "Missing target_channel in config"
+            
+            # Test connection to Twitch IRC
+            sock = socket.socket()
+            sock.settimeout(5)
+            sock.connect(("irc.chat.twitch.tv", 6667))
+            
+            # Try with bot token if available, otherwise use anonymous
+            if 'twitch_bot_access_token' in self.config and self.config['twitch_bot_access_token']:
+                sock.send(f"PASS oauth:{self.config['twitch_bot_access_token']}\r\n".encode('utf-8'))
+                sock.send(f"NICK {self.config.get('twitch_bot_username', 'Zeddy_bot')}\r\n".encode('utf-8'))
+            else:
+                # Anonymous connection (read-only)
+                sock.send(f"NICK justinfan12345\r\n".encode('utf-8'))
+            
+            # Read response to check if authentication was successful
+            response = sock.recv(1024).decode('utf-8', errors='ignore')
+            print(f"[CHAT_TEST] IRC Response: {response}")  # Debug output
+            sock.close()
+            
+            if ":tmi.twitch.tv 001" in response:  # Welcome message indicates success
+                if 'twitch_bot_access_token' in self.config and self.config['twitch_bot_access_token']:
+                    return True, "Chat connection test successful (authenticated bot)"
+                else:
+                    return True, "Chat connection test successful (anonymous - read only)"
+            elif "Login authentication failed" in response or ":tmi.twitch.tv NOTICE * :Login authentication failed" in response:
+                return False, "Authentication failed - check your access token"
+            elif ":tmi.twitch.tv NOTICE * :Improperly formatted auth" in response:
+                return False, "Improperly formatted auth - check token format"
+            else:
+                return False, f"Unexpected response: {response}"
+                
+        except socket.timeout:
+            return False, "Connection timeout - check network connection"
+        except Exception as e:
+            return False, f"Connection test failed: {str(e)}"
+
     # Q&A/OBS methods using obsws-python ReqClient
     def display_question_on_obs(self, username, message):
         if not self.obs_client:
@@ -208,27 +285,105 @@ def api_history():
 
 @app.route('/api/send_chat', methods=['POST'])
 def send_chat():
+    print(f"[CHAT] Received request from {request.remote_addr}")
     data = request.json
     message = data.get('message', '') if data else ''
+    print(f"[CHAT] Message: {message}")
+    
     if not message:
         return jsonify({"success": False, "error": "No message provided"})
+    
+    if not dashboard_data.config.get('target_channel'):
+        print("[CHAT] Missing target_channel")
+        return jsonify({"success": False, "error": "Missing target_channel in config"})
+    
+    # Check if we have a bot token, if not or if it's invalid, try to refresh
+    if not dashboard_data.config.get('twitch_bot_access_token'):
+        print("[CHAT] No bot access token, attempting to refresh...")
+        if not dashboard_data.refresh_bot_token():
+            return jsonify({"success": False, "error": "No valid bot access token available"})
+    
+    print(f"[CHAT] Attempting to send to channel: {dashboard_data.config.get('target_channel')}")
+    
     try:
         server = "irc.chat.twitch.tv"
         port = 6667
         sock = socket.socket()
+        sock.settimeout(10)  # Set timeout to prevent hanging
+        print(f"[CHAT] Connecting to {server}:{port}")
         sock.connect((server, port))
+        
+        # IRC authentication flow with proper bot token
         sock.send(f"PASS oauth:{dashboard_data.config['twitch_bot_access_token']}\r\n".encode('utf-8'))
         sock.send(f"NICK {dashboard_data.config.get('twitch_bot_username', 'Zeddy_bot')}\r\n".encode('utf-8'))
-        sock.send(f"JOIN #{dashboard_data.config.get('target_channel', '')}\r\n".encode('utf-8'))
-        sock.send(f"PRIVMSG #{dashboard_data.config.get('target_channel', '')} :{message}\r\n".encode('utf-8'))
+        print("[CHAT] Sent authentication")
+        
+        # Wait for server response before joining
+        time.sleep(1)
+        
+        # Request capabilities for better IRC support
+        sock.send("CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands\r\n".encode('utf-8'))
+        
+        # Join channel
+        target_channel = dashboard_data.config.get('target_channel', '')
+        sock.send(f"JOIN #{target_channel}\r\n".encode('utf-8'))
+        print(f"[CHAT] Joined channel #{target_channel}")
+        
+        # Wait a bit more before sending message
+        time.sleep(0.5)
+        
+        # Send the actual message
+        sock.send(f"PRIVMSG #{target_channel} :{message}\r\n".encode('utf-8'))
+        print(f"[CHAT] Sent message: {message}")
+        
+        # Wait a moment for the message to be sent before closing
+        time.sleep(0.5)
+        
         sock.close()
+        print("[CHAT] Connection closed successfully")
         return jsonify({"success": True, "message": f"Sent to Twitch: {message}"})
+    except socket.timeout:
+        print("[CHAT] Connection timeout")
+        return jsonify({"success": False, "error": "Connection timeout - check your network connection"})
+    except ConnectionRefusedError:
+        print("[CHAT] Connection refused")
+        return jsonify({"success": False, "error": "Connection refused - check if Twitch IRC server is accessible"})
     except Exception as e:
+        print(f"[CHAT] Error: {str(e)}")
+        # If we get an authentication error, try refreshing the token once
+        if "authentication" in str(e).lower():
+            print("[CHAT] Authentication error, trying to refresh token...")
+            if dashboard_data.refresh_bot_token():
+                return jsonify({"success": False, "error": "Token refreshed, please try again"})
         return jsonify({"success": False, "error": f"Failed to send: {str(e)}"})
 
 @app.route('/api/chat')
 def api_chat():
     return jsonify(list(dashboard_data.chat_messages))
+
+@app.route('/api/test_chat', methods=['GET'])
+def test_chat():
+    """Test chat connection and credentials"""
+    success, message = dashboard_data.test_chat_connection()
+    return jsonify({"success": success, "message": message})
+
+@app.route('/api/refresh_token', methods=['POST'])
+def refresh_token():
+    """Manually refresh the bot access token"""
+    success = dashboard_data.refresh_bot_token()
+    if success:
+        return jsonify({"success": True, "message": "Bot token refreshed successfully"})
+    else:
+        return jsonify({"success": False, "message": "Failed to refresh bot token"})
+
+@app.route('/api/ping', methods=['GET'])
+def ping():
+    """Simple connectivity test"""
+    return jsonify({
+        "status": "ok", 
+        "message": "Dashboard server is reachable",
+        "server_time": datetime.now().isoformat()
+    })
 
 # Q&A API endpoints
 @app.route('/api/display_question', methods=['POST'])

@@ -228,53 +228,52 @@ class DashboardData:
 
     # Q&A/OBS methods using obsws-python ReqClient
     def display_question_on_obs(self, username, message):
+        """Display Q&A using browser source (primary method)"""
         if not self.obs_client:
             return False, "OBS not connected"
         try:
-            question_text = f"Q: {message}\n— {username}"
-            # Set the text of the input (text source)
-            self.obs_client.set_input_settings(
-                name="Q&A",                    # The input (source) name - CORRECTED
-                settings={"text": question_text},
-                overlay=True
-            )
-            # Enable the scene item (make sure to set the correct scene and item id)
+            # Store the question data for browser source to fetch via API
+            self.current_question = {
+                'username': username,
+                'message': message,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Enable the Q&A nested scene (ID 73) which contains the browser source
             try:
                 self.obs_client.set_scene_item_enabled(
                     scene_name="Scene - In Game",  # Your OBS scene name
-                    item_id=73,                     # Your QnA text source item ID - CORRECTED
-                    enabled=True                   # Enable the item
+                    item_id=73,                     # Your Q&A nested scene item ID
+                    enabled=True                   # Enable the nested scene
                 )
+                return True, "Question displayed on stream via browser source"
             except Exception as scene_error:
-                # If scene item doesn't exist, just update the text source
                 print(f"[OBS] Scene item ID 73 not found: {scene_error}")
-                print("[OBS] Text updated but scene item visibility not changed")
+                return False, f"Failed to show Q&A scene: {scene_error}"
 
-            return True, "Question displayed on stream"
         except Exception as e:
             return False, f"OBS error: {str(e)}"
 
     def hide_question_on_obs(self):
+        """Hide Q&A browser source"""
         if not self.obs_client:
             return False, "OBS not connected"
         try:
+            # Clear the question data
+            self.current_question = {}
+            
+            # Hide the Q&A nested scene (ID 73)
             try:
                 self.obs_client.set_scene_item_enabled(
                     scene_name="Scene - In Game",  # Your OBS scene name
-                    item_id=73,                     # Your QnA text source item ID - CORRECTED
-                    enabled=False                  # Disable the item
+                    item_id=73,                     # Your Q&A nested scene item ID
+                    enabled=False                  # Hide the nested scene
                 )
+                return True, "Question hidden"
             except Exception as scene_error:
-                # If scene item doesn't exist, just clear the text source
                 print(f"[OBS] Scene item ID 73 not found: {scene_error}")
-                self.obs_client.set_input_settings(
-                    name="Q&A",                    # CORRECTED source name
-                    settings={"text": ""},
-                    overlay=True
-                )
-                print("[OBS] Text cleared since scene item visibility cannot be changed")
+                return False, f"Failed to hide Q&A scene: {scene_error}"
 
-            return True, "Question hidden"
         except Exception as e:
             return False, f"OBS error: {str(e)}"
 
@@ -510,32 +509,17 @@ def display_question():
     if not username or not message:
         return jsonify({"success": False, "error": "Missing username or message"})
     
-    # Store question data for browser source
-    dashboard_data.current_question = {
-        'username': username,
-        'message': message,
-        'timestamp': datetime.now().isoformat()
-    }
-    
-    # Try browser source first (styled), fallback to text source
-    ok, msg = dashboard_data.display_question_on_obs_browser(username, message)
-    if not ok:
-        # Fallback to plain text source
-        ok, msg = dashboard_data.display_question_on_obs(username, message)
+    # Use the browser source method (primary)
+    ok, msg = dashboard_data.display_question_on_obs(username, message)
     
     return jsonify({"success": ok, "message": msg})
 
 @app.route('/api/hide_question', methods=['POST'])
 def hide_question():
-    dashboard_data.current_question = {}
-    # Try to hide both browser source and text source
-    ok1, msg1 = dashboard_data.hide_question_on_obs_browser()
-    ok2, msg2 = dashboard_data.hide_question_on_obs()
+    # Use the browser source method
+    ok, msg = dashboard_data.hide_question_on_obs()
     
-    # Return success if either worked
-    success = ok1 or ok2
-    message = msg1 if ok1 else msg2
-    return jsonify({"success": success, "message": message})
+    return jsonify({"success": ok, "message": msg})
 
 @app.route('/api/current_question')
 def get_current_question():

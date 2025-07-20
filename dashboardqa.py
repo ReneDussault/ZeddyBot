@@ -234,16 +234,21 @@ class DashboardData:
             question_text = f"Q: {message}\n— {username}"
             # Set the text of the input (text source)
             self.obs_client.set_input_settings(
-                name="QnA_Text",           # The input (source) name
+                name="Q&A",                    # The input (source) name - CORRECTED
                 settings={"text": question_text},
                 overlay=True
             )
             # Enable the scene item (make sure to set the correct scene and item id)
-            self.obs_client.set_scene_item_enabled(
-                scene_name="Scene - In Game",  # Your OBS scene name
-                item_id=72,                     # Your QnA text source item ID
-                enabled=True                   # Enable the item
-            )
+            try:
+                self.obs_client.set_scene_item_enabled(
+                    scene_name="Scene - In Game",  # Your OBS scene name
+                    item_id=73,                     # Your QnA text source item ID - CORRECTED
+                    enabled=True                   # Enable the item
+                )
+            except Exception as scene_error:
+                # If scene item doesn't exist, just update the text source
+                print(f"[OBS] Scene item ID 73 not found: {scene_error}")
+                print("[OBS] Text updated but scene item visibility not changed")
 
             return True, "Question displayed on stream"
         except Exception as e:
@@ -253,11 +258,21 @@ class DashboardData:
         if not self.obs_client:
             return False, "OBS not connected"
         try:
-            self.obs_client.set_scene_item_enabled(
-                scene_name="Scene - In Game",  # Your OBS scene name
-                item_id=72,                     # Your QnA text source item ID
-                enabled=False                  # Disable the item
-            )
+            try:
+                self.obs_client.set_scene_item_enabled(
+                    scene_name="Scene - In Game",  # Your OBS scene name
+                    item_id=73,                     # Your QnA text source item ID - CORRECTED
+                    enabled=False                  # Disable the item
+                )
+            except Exception as scene_error:
+                # If scene item doesn't exist, just clear the text source
+                print(f"[OBS] Scene item ID 73 not found: {scene_error}")
+                self.obs_client.set_input_settings(
+                    name="Q&A",                    # CORRECTED source name
+                    settings={"text": ""},
+                    overlay=True
+                )
+                print("[OBS] Text cleared since scene item visibility cannot be changed")
 
             return True, "Question hidden"
         except Exception as e:
@@ -439,6 +454,41 @@ def refresh_token():
         return jsonify({"success": True, "message": "Bot token refreshed successfully"})
     else:
         return jsonify({"success": False, "message": "Failed to refresh bot token"})
+
+@app.route('/api/obs_scene_items/<scene_name>')
+def get_scene_items(scene_name):
+    """Get all scene items in a specific scene for debugging"""
+    if not dashboard_data.obs_client:
+        return jsonify({"success": False, "error": "OBS not connected"})
+    
+    try:
+        scene_items = dashboard_data.obs_client.get_scene_item_list(name=scene_name)
+        items_info = []
+        items = []
+        if scene_items is not None:
+            if hasattr(scene_items, 'sceneItems'):
+                items = getattr(scene_items, 'sceneItems', [])
+            elif hasattr(scene_items, 'scene_items'):
+                items = getattr(scene_items, 'scene_items', [])
+            elif isinstance(scene_items, dict) and 'sceneItems' in scene_items:
+                items = scene_items['sceneItems']
+            elif isinstance(scene_items, dict) and 'scene_items' in scene_items:
+                items = scene_items['scene_items']
+        for item in items:
+            # Handle both dict and object item types
+            scene_item_id = item['sceneItemId'] if isinstance(item, dict) else getattr(item, 'sceneItemId', None)
+            source_name = item['sourceName'] if isinstance(item, dict) else getattr(item, 'sourceName', None)
+            input_kind = item['inputKind'] if isinstance(item, dict) and 'inputKind' in item else getattr(item, 'inputKind', 'Unknown') if hasattr(item, 'inputKind') else 'Unknown'
+            enabled = item['sceneItemEnabled'] if isinstance(item, dict) else getattr(item, 'sceneItemEnabled', None)
+            items_info.append({
+                "id": scene_item_id,
+                "name": source_name,
+                "type": input_kind,
+                "enabled": enabled
+            })
+        return jsonify({"success": True, "scene": scene_name, "items": items_info})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/ping', methods=['GET'])
 def ping():
@@ -667,7 +717,7 @@ def test_notification():
 def change_obs_scene():
     """Change OBS scene"""
     try:
-        data = request.json
+        data = request.json if request.json else {}
         scene_name = data.get('scene_name', '')
         
         if not dashboard_data.obs_client:
@@ -695,9 +745,21 @@ def get_obs_scenes():
         # Test the connection first
         try:
             scenes = dashboard_data.obs_client.get_scene_list()
-            scene_list = [scene['sceneName'] for scene in scenes.scenes]
-            current_scene = scenes.current_program_scene_name
-            
+            scene_list = []
+            current_scene = None
+            if scenes is not None:
+                # Handle both object and dict return types for scenes
+                if hasattr(scenes, 'scenes'):
+                    scene_items = getattr(scenes, 'scenes', [])
+                    scene_list = [scene['sceneName'] if isinstance(scene, dict) else getattr(scene, 'sceneName', None) for scene in scene_items]
+                    current_scene = getattr(scenes, 'currentProgramSceneName', None)
+                elif isinstance(scenes, dict) and 'scenes' in scenes:
+                    scene_items = scenes['scenes']
+                    scene_list = [scene['sceneName'] for scene in scene_items]
+                    current_scene = scenes.get('currentProgramSceneName')
+                else:
+                    scene_list = []
+                    current_scene = None
             return jsonify({
                 "success": True,
                 "scenes": scene_list,
@@ -715,7 +777,7 @@ def get_obs_scenes():
 def toggle_obs_source():
     """Toggle visibility of an OBS source"""
     try:
-        data = request.json
+        data = request.json if request.json else {}
         scene_name = data.get('scene_name', 'Scene - In Game')
         source_name = data.get('source_name', '')
         enabled = data.get('enabled', True)
@@ -726,9 +788,23 @@ def toggle_obs_source():
         # Get scene item ID for the source
         scene_items = dashboard_data.obs_client.get_scene_item_list(scene_name)
         item_id = None
-        for item in scene_items.scene_items:
-            if item['sourceName'] == source_name:
-                item_id = item['sceneItemId']
+        # Handle both dict and object return types
+        items = []
+        if scene_items is not None:
+            if hasattr(scene_items, 'sceneItems'):
+                items = getattr(scene_items, 'sceneItems', [])
+            elif hasattr(scene_items, 'scene_items'):
+                items = getattr(scene_items, 'scene_items', [])
+            elif isinstance(scene_items, dict) and 'sceneItems' in scene_items:
+                items = scene_items['sceneItems']
+            elif isinstance(scene_items, dict) and 'scene_items' in scene_items:
+                items = scene_items['scene_items']
+        for item in items:
+            # Handle both dict and object item types
+            source_name_val = item['sourceName'] if isinstance(item, dict) else getattr(item, 'sourceName', None)
+            scene_item_id_val = item['sceneItemId'] if isinstance(item, dict) else getattr(item, 'sceneItemId', None)
+            if source_name_val == source_name:
+                item_id = scene_item_id_val
                 break
         
         if item_id is None:
@@ -789,7 +865,7 @@ def get_discord_stats():
 def send_quick_message():
     """Send predefined quick messages to Twitch chat"""
     try:
-        data = request.json
+        data = request.json if request.json else {}
         message_type = data.get('type', '')
         
         quick_messages = {
@@ -797,7 +873,6 @@ def send_quick_message():
             "follow": "Thanks for the follow! Really appreciate the support! ❤️",
             "brb": "Be right back in a few minutes! Don't go anywhere! ⏰",
             "ending": "Thanks for watching! Stream ending soon, catch you next time! 👋",
-            "social": "Follow me on Twitter @YourHandle and join our Discord! Links in bio! 📱",
             "lurk": "Thanks for lurking! Appreciate you being here! 👀"
         }
         

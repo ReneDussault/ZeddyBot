@@ -667,11 +667,16 @@
                 <div style="margin-top: 1rem;">
                     <h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; color: white;">Q&A Theme:</h3>
                     <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
-                        <button onclick="setQnaTheme('default')" style="background: #9146ff; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Purple</button>
-                        <button onclick="setQnaTheme('green')" style="background: #48bb78; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Green</button>
-                        <button onclick="setQnaTheme('blue')" style="background: #3498db; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Blue</button>
-                        <button onclick="setQnaTheme('red')" style="background: #e74c3c; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Red</button>
-                        <button onclick="setQnaTheme('orange')" style="background: #f39c12; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Orange</button>
+                        <button onclick="setQnaTheme('default')"
+                            style="background: #9146ff; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Purple</button>
+                        <button onclick="setQnaTheme('green')"
+                            style="background: #48bb78; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Green</button>
+                        <button onclick="setQnaTheme('blue')"
+                            style="background: #3498db; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Blue</button>
+                        <button onclick="setQnaTheme('red')"
+                            style="background: #e74c3c; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Red</button>
+                        <button onclick="setQnaTheme('orange')"
+                            style="background: #f39c12; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Orange</button>
                     </div>
                 </div>
                 <div id="qna-theme-status" style="margin-top: 0.5rem; font-size: 0.8rem;"></div>
@@ -815,7 +820,7 @@
 
                     const result = await response.json();
                     const statusDiv = document.getElementById('qna-theme-status');
-                    
+
                     if (result.success) {
                         statusDiv.style.color = '#48bb78';
                         statusDiv.textContent = `✓ Theme set to ${result.theme}`;
@@ -834,8 +839,8 @@
                 }
             }
 
-            setInterval(updateChat, 2000);
-            setInterval(refreshQuestion, 5000);
+            setInterval(updateChat, 10000);  // Reduced from 2000ms to 10000ms (10 seconds)
+            setInterval(refreshQuestion, 15000);  // Reduced from 5000ms to 15000ms (15 seconds)
             updateChat();
             refreshQuestion();
 
@@ -1286,8 +1291,8 @@
 
             // Auto refresh every 60 seconds (reduced from 30 to minimize jumping)
             setInterval(loadData, 60000);
-            // Update system status less frequently (reduced from 15 to 30 seconds)
-            setInterval(updateSystemStatus, 30000);
+            // Update system status less frequently (reduced from 30 to 60 seconds)
+            setInterval(updateSystemStatus, 60000);  // Reduced from 30000ms to 60000ms
         </script>
 </body>
 

@@ -204,7 +204,9 @@ class DashboardData:
             
             # Read response to check if authentication was successful
             response = sock.recv(1024).decode('utf-8', errors='ignore')
-            print(f"[CHAT_TEST] IRC Response: {response}")  # Debug output
+            # Only print non-verbose IRC messages for debugging
+            if not any(code in response for code in ["001", "002", "003", "004", "375", "372", "376"]):
+                print(f"[CHAT_TEST] IRC Response: {response}")  # Debug output
             sock.close()
             
             if ":tmi.twitch.tv 001" in response:  # Welcome message indicates success
@@ -846,6 +848,10 @@ def update_loop():
         time.sleep(30)
 
 if __name__ == '__main__':
+    # Disable Flask request logging
+    import logging
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+    
     update_thread = threading.Thread(target=update_loop, daemon=True)
     update_thread.start()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)  # Disabled debug mode

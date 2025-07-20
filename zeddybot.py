@@ -250,8 +250,8 @@ class TwitchChatBot:
                 return False
 
         try:
-            if not self.connected or self.socket is None:
-                return
+            if self.socket is None:
+                return False
             self.socket.send(f"PRIVMSG #{self.config.target_channel} :{message}\r\n".encode("utf-8"))
             print(f"[{now()}] Sending to Twitch chat: {message}")
             return True
@@ -267,11 +267,18 @@ class TwitchChatBot:
 
         try:
             data = self.socket.recv(2048).decode("utf-8")
-            if data.startswith("PING"):
-                self.socket.send("PONG\r\n".encode("utf-8"))
-            elif "PRIVMSG" in data:
-                # Check for bot moderation commands
-                self._handle_chat_message(data)
+            lines = data.strip().split('\r\n')
+            
+            for line in lines:
+                if line.startswith("PING"):
+                    self.socket.send("PONG\r\n".encode("utf-8"))
+                elif "PRIVMSG" in line:
+                    # Check for bot moderation commands
+                    self._handle_chat_message(line)
+                # Ignore IRC welcome messages and other server responses
+                elif any(code in line for code in ["001", "002", "003", "004", "375", "372", "376"]):
+                    continue  # Don't log these verbose messages
+                    
         except Exception as e:
             # no data to read or other socket errors
             pass
@@ -892,7 +899,7 @@ class ZeddyBot(commands.Bot):
         self.twitch_api.refresh_bot_token()
 
 
-    @loop(minutes=5)
+    @loop(minutes=2)
     async def check_twitch_ping(self):
         self.twitch_chat_bot.check_for_ping()
 

@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1800px;
             margin: 0 auto;
             padding: 2rem;
         }
@@ -39,24 +39,56 @@
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
+            grid-template-columns: 1fr 1fr 1.15fr 1fr 1fr 1fr 1fr;
+            grid-template-rows: repeat(2, auto);
+            gap: 1.2rem;
             margin-bottom: 2rem;
+        }
+
+        .obs-column {
+            grid-column: 7;
+            grid-row: 1 / 3;
+            /* Takes up both rows of the 7th column */
+        }
+
+        @media (max-width: 1400px) {
+            .grid {
+                grid-template-columns: repeat(4, 1fr);
+                grid-template-rows: repeat(3, auto);
+            }
+
+            .obs-column {
+                grid-column: 4;
+                grid-row: 1 / 3;
+            }
+        }
+
+        @media (max-width: 1000px) {
+            .grid {
+                grid-template-columns: repeat(3, 1fr);
+                grid-template-rows: auto;
+            }
+
+            .obs-column {
+                grid-column: 1 / -1;
+                /* Full width on smaller screens */
+                grid-row: auto;
+            }
         }
 
         .card {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
             border-radius: 15px;
-            padding: 1.5rem;
+            padding: 1.1rem;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .card h2 {
-            margin-bottom: 1rem;
+            margin-bottom: 0.4rem;
             color: #4a5568;
-            font-size: 1.25rem;
+            font-size: 1.15rem;
         }
 
         .status-indicator {
@@ -91,8 +123,8 @@
         .stat-row {
             display: flex;
             justify-content: space-between;
-            margin: 0.5rem 0;
-            padding: 0.5rem 0;
+            margin: 0.3rem 0;
+            padding: 0.3rem 0;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
 
@@ -194,6 +226,214 @@
             transform: scale(1.1);
         }
 
+        /* Bot Moderation Styles */
+        .mod-button {
+            background: linear-gradient(135deg, #9146ff, #772ce8);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            margin: 0.25rem;
+            min-width: 120px;
+        }
+
+        .mod-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(145, 70, 255, 0.3);
+        }
+
+        .mod-button.danger {
+            background: linear-gradient(135deg, #e53e3e, #c53030);
+        }
+
+        .mod-button.danger:hover {
+            box-shadow: 0 4px 12px rgba(229, 62, 62, 0.3);
+        }
+
+        .mod-button.warning {
+            background: linear-gradient(135deg, #ed8936, #dd6b20);
+        }
+
+        .mod-button.warning:hover {
+            box-shadow: 0 4px 12px rgba(237, 137, 54, 0.3);
+        }
+
+        .mod-button:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .bot-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .bot-stat-item {
+            text-align: center;
+            padding: 0.75rem;
+            background: rgba(145, 70, 255, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(145, 70, 255, 0.2);
+        }
+
+        .bot-stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #9146ff;
+        }
+
+        .bot-stat-label {
+            font-size: 0.875rem;
+            color: #718096;
+            margin-top: 0.25rem;
+        }
+
+        .status-message {
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            font-size: 0.875rem;
+        }
+
+        /* Status indicator styles */
+        .status-indicator {
+            text-align: center;
+            padding: 0.5rem 0.25rem;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease;
+        }
+
+        .status-indicator:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        .system-status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            padding: 0.5rem 0;
+        }
+
+        @media (max-width: 768px) {
+            .system-status-grid {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .system-status-grid {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+        }
+
+        .status-dot {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            display: block;
+            line-height: 1.2;
+            transition: all 0.3s ease;
+            text-align: center;
+            width: 100%;
+        }
+
+        .status-dot.online {
+            color: #48bb78;
+            text-shadow: 0 0 8px rgba(72, 187, 120, 0.5);
+        }
+
+        .status-dot.offline {
+            color: #f56565;
+            text-shadow: 0 0 8px rgba(245, 101, 101, 0.5);
+        }
+
+        .status-dot.warning {
+            color: #ed8936;
+            text-shadow: 0 0 8px rgba(237, 137, 54, 0.5);
+        }
+
+        .status-label {
+            font-size: 0.65rem;
+            color: #a0aec0;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            line-height: 1.1;
+        }
+
+        /* Scene button specific styles */
+        .scene-button {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            margin: 0.25rem;
+            min-width: 100px;
+            font-size: 0.875rem;
+        }
+
+        .scene-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 3px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .scene-button.active {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            box-shadow: 0 2px 8px rgba(72, 187, 120, 0.3);
+        }
+
+        /* Success/Error message styles */
+        .success-message {
+            background: rgba(72, 187, 120, 0.1);
+            color: #48bb78;
+            border: 1px solid rgba(72, 187, 120, 0.3);
+        }
+
+        .error-message {
+            background: rgba(245, 101, 101, 0.1);
+            color: #f56565;
+            border: 1px solid rgba(245, 101, 101, 0.3);
+        }
+
+        .warning-message {
+            background: rgba(237, 137, 54, 0.1);
+            color: #ed8936;
+            border: 1px solid rgba(237, 137, 54, 0.3);
+        }
+
+        .status-success {
+            background: rgba(72, 187, 120, 0.1);
+            border: 1px solid rgba(72, 187, 120, 0.3);
+            color: #38a169;
+        }
+
+        .status-error {
+            background: rgba(229, 62, 62, 0.1);
+            border: 1px solid rgba(229, 62, 62, 0.3);
+            color: #e53e3e;
+        }
+
+        .status-warning {
+            background: rgba(237, 137, 54, 0.1);
+            border: 1px solid rgba(237, 137, 54, 0.3);
+            color: #dd6b20;
+        }
+
         @keyframes pulse {
 
             0%,
@@ -255,6 +495,7 @@
         </div>
 
         <div class="grid">
+            <!-- Row 1: System Status Cards -->
             <div class="card stream-info">
                 <h2>
                     <span class="status-indicator" id="stream-status"></span>
@@ -290,12 +531,12 @@
 
                 <div class="stat-row">
                     <span>Discord:</span>
-                    <span id="discord-status">Connected</span>
+                    <span id="bot-discord-status" style="color: #48bb78;">Connected</span>
                 </div>
 
                 <div class="stat-row">
                     <span>Twitch Chat:</span>
-                    <span id="twitch-status">Connected</span>
+                    <span id="bot-twitch-status" style="color: #48bb78;">Connected</span>
                 </div>
 
                 <div class="stat-row">
@@ -304,16 +545,116 @@
                 </div>
             </div>
 
-            <div class="card">
-                <h2>Send Chat Message</h2>
-                <div class="chat-form">
-                    <input type="text" class="chat-input" id="chat-message" placeholder="Type your message...">
-                    <button class="btn" onclick="sendChatMessage()">Send</button>
+            <div class="card system-status-card">
+                <h2>⚙️ System Status</h2>
+
+                <div class="system-status-grid">
+                    <div class="status-indicator">
+                        <div class="status-dot" id="system-discord-status">●</div>
+                        <div class="status-label">Discord Bot</div>
+                    </div>
+                    <div class="status-indicator">
+                        <div class="status-dot" id="system-twitch-status">●</div>
+                        <div class="status-label">Twitch Chat</div>
+                    </div>
+                    <div class="status-indicator">
+                        <div class="status-dot" id="system-obs-status">●</div>
+                        <div class="status-label">OBS WebSocket</div>
+                    </div>
                 </div>
-                <div id="chat-response" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
+
+                <div style="display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: center; margin-top: 4.5rem;">
+                    <button onclick="testChatConnection()"
+                        style="background: #3498db; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600;">
+                        🔗 Test Chat
+                    </button>
+                    <button onclick="pingDashboard()"
+                        style="background: #2ecc71; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600;">
+                        📡 Ping Dashboard
+                    </button>
+                </div>
+                <div id="system-status-message" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
             </div>
 
-            <!-- Q&A Control Card -->
+            <div class="card">
+                <h2>💬 Quick Chat Messages</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem;">
+                    <button class="mod-button" onclick="sendQuickMessage('welcome')" style="background: #3498db;">
+                        👋 Welcome
+                    </button>
+                    <button class="mod-button" onclick="sendQuickMessage('follow')" style="background: #e74c3c;">
+                        ❤️ Thanks Follow
+                    </button>
+                    <button class="mod-button" onclick="sendQuickMessage('brb')" style="background: #f39c12;">
+                        ⏰ BRB
+                    </button>
+                    <button class="mod-button" onclick="sendQuickMessage('ending')" style="background: #9b59b6;">
+                        👋 Ending Soon
+                    </button>
+                    <button class="mod-button" onclick="sendQuickMessage('lurk')" style="background: #95a5a6;">
+                        👀 Thanks Lurk
+                    </button>
+                </div>
+                <div id="quick-message-status" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
+            </div>
+
+            <div class="card">
+                <h2>🤖 Bot Moderation</h2>
+
+                <div class="bot-stats">
+                    <div class="bot-stat-item">
+                        <div class="bot-stat-number" id="known-bots">-</div>
+                        <div class="bot-stat-label">Known Bots</div>
+                    </div>
+                    <div class="bot-stat-item">
+                        <div class="bot-stat-number" id="last-check">-</div>
+                        <div class="bot-stat-label">Last Check</div>
+                    </div>
+                </div>
+
+                <div id="bot-status-message"></div>
+
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
+                    <button class="mod-button" onclick="checkBots()">
+                        🔍 Check Bots
+                    </button>
+                    <button class="mod-button warning" onclick="timeoutBots()">
+                        ⏰ Timeout Bots
+                    </button>
+                    <button class="mod-button danger" onclick="banBots()">
+                        🚫 Ban Bots
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>💬 Discord Control</h2>
+
+                <div class="bot-stats" style="margin-bottom: 1rem;">
+                    <div class="bot-stat-item">
+                        <div class="bot-stat-number" id="discord-members">-</div>
+                        <div class="bot-stat-label">Discord Online</div>
+                    </div>
+                    <div class="bot-stat-item">
+                        <div class="bot-stat-number" id="discord-server-members">-</div>
+                        <div class="bot-stat-label">Total Members</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;">
+                    <button class="mod-button" onclick="forceNotification()" style="background: #9146ff;">
+                        🔔 Force Notify
+                    </button>
+                    <button class="mod-button" onclick="testNotification()" style="background: #00d4aa;">
+                        🧪 Test Notify
+                    </button>
+                    <button class="mod-button warning" onclick="refreshBotToken()">
+                        🔄 Refresh Token
+                    </button>
+                </div>
+                <div id="stream-control-status" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
+            </div>
+
             <div class="card qna-controls">
                 <h2>Q&amp;A Control</h2>
                 <div id="current-question-display">
@@ -324,235 +665,590 @@
                     <button class="btn" onclick="refreshQuestion()" style="background: #3498db;">Refresh</button>
                 </div>
             </div>
-        </div>
 
-        <!-- Chat messages -->
-        <div id="chat-messages"
-            style="height: 300px; max-height: 300px; overflow-y: auto; margin-bottom: 1rem; padding: 1rem; background: linear-gradient(135deg, #1a1446 0%, #2d0036 100%); border-radius: 8px; box-shadow: 0 2px 8px rgba(255,0,255,0.15); border: 1.5px solid #ff00cc;">
-        </div>
+            <!-- OBS Scene Control Card - Takes half of 4th column -->
+            <div class="card obs-column">
+                <h2>🎥 OBS Scene Control</h2>
+                <div id="obs-status"
+                    style="margin-bottom: 1rem; padding: 0.5rem; border-radius: 5px; background: #f39c12; color: white; text-align: center;">
+                    Loading OBS status...
+                </div>
 
-        <div class="card">
-            <h2>Recent Streams</h2>
-            <div class="history-list" id="stream-history">
-                <div class="history-item loading">
-                    <div class="history-title">Loading stream history...</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 1rem;"
+                    id="scene-buttons">
+                    <!-- Scene buttons will be populated by JavaScript -->
                 </div>
             </div>
+
+            <!-- Row 2: Q&A control and Chat Section -->
+            <!-- Live Chat Card - Main Q&A Feature -->
+            <div class="card" style="grid-column: span 4;">
+                <h2>💬 Live Chat</h2>
+                <div id="chat-messages"
+                    style="height: 300px; max-height: 300px; overflow-y: auto; padding: 1rem; background: linear-gradient(135deg, #1a1446 0%, #2d0036 100%); border-radius: 8px; box-shadow: 0 2px 8px rgba(255,0,255,0.15); border: 1.5px solid #ff00cc;">
+                </div>
+                <div style="font-size: 0.8rem; color: #666; margin-top: 0.5rem; text-align: center;">
+                    Click on any message to display it as a Q&A
+                </div>
+            </div>
+            <div class="card">
+                <h2>Send Chat Message</h2>
+                <div class="chat-form">
+                    <input type="text" class="chat-input" id="chat-message" placeholder="Type your message...">
+                    <button class="btn" onclick="sendChatMessage()">Send</button>
+                </div>
+                <div id="chat-response" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
+            </div>
         </div>
-    </div>
 
-    <button class="refresh-btn" onclick="loadData()" title="Refresh Data">
-        ↻
-    </button>
+        <button class="refresh-btn" onclick="loadData()" title="Refresh Data">
+            ↻
+        </button>
 
-    <script>
-        // Q&A and Chat Integration
+        <script>
+            // Q&A and Chat Integration
 
-        function updateChat() {
-            fetch('/api/chat')
-                .then(response => response.json())
-                .then(messages => {
-                    const chatDiv = document.getElementById('chat-messages');
-                    const isNearTop = chatDiv.scrollTop < 60;
-                    chatDiv.innerHTML = '';
-                    messages.slice().reverse().forEach(msg => {
-                        const msgDiv = document.createElement('div');
-                        msgDiv.className = 'chat-message';
-                        msgDiv.onclick = () => displayQuestion(msg.username, msg.message);
-                        msgDiv.innerHTML = `<span style="color:#ffe066;">[${msg.timestamp}]</span> <strong style="color:#00fff7;">${msg.username}:</strong> <span style="color:#ff61f6;">${msg.message}</span>`;
-                        chatDiv.appendChild(msgDiv);
+            function updateChat() {
+                fetch('/api/chat')
+                    .then(response => response.json())
+                    .then(messages => {
+                        const chatDiv = document.getElementById('chat-messages');
+                        const isNearTop = chatDiv.scrollTop < 60;
+                        chatDiv.innerHTML = '';
+                        messages.slice().reverse().forEach(msg => {
+                            const msgDiv = document.createElement('div');
+                            msgDiv.className = 'chat-message';
+                            msgDiv.onclick = () => displayQuestion(msg.username, msg.message);
+                            msgDiv.innerHTML = `<span style="color:#ffe066;">[${msg.timestamp}]</span> <strong style="color:#00fff7;">${msg.username}:</strong> <span style="color:#ff61f6;">${msg.message}</span>`;
+                            chatDiv.appendChild(msgDiv);
+                        });
+                        if (isNearTop) {
+                            chatDiv.scrollTop = 0;
+                        }
+                    })
+                    .catch(err => console.error('Chat update error:', err));
+            }
+
+            // Q&A functions
+            async function displayQuestion(username, message) {
+                try {
+                    const response = await fetch('/api/display_question', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, message })
                     });
-                    if (isNearTop) {
-                        chatDiv.scrollTop = 0;
+
+                    const result = await response.json();
+                    if (result.success) {
+                        updateCurrentQuestion(username, message);
+                    } else {
+                        alert('Failed to display question: ' + (result.error || result.message));
                     }
-                })
-                .catch(err => console.error('Chat update error:', err));
-        }
-
-        // Q&A functions
-        async function displayQuestion(username, message) {
-            try {
-                const response = await fetch('/api/display_question', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, message })
-                });
-
-                const result = await response.json();
-                if (result.success) {
-                    updateCurrentQuestion(username, message);
-                } else {
-                    alert('Failed to display question: ' + (result.error || result.message));
+                } catch (error) {
+                    alert('Error displaying question: ' + error.message);
                 }
-            } catch (error) {
-                alert('Error displaying question: ' + error.message);
             }
-        }
 
-        async function hideQuestion() {
-            try {
-                const response = await fetch('/api/hide_question', {
-                    method: 'POST'
-                });
+            async function hideQuestion() {
+                try {
+                    const response = await fetch('/api/hide_question', {
+                        method: 'POST'
+                    });
 
-                const result = await response.json();
-                if (result.success) {
-                    clearCurrentQuestion();
+                    const result = await response.json();
+                    if (result.success) {
+                        clearCurrentQuestion();
+                    }
+                } catch (error) {
+                    alert('Error hiding question: ' + error.message);
                 }
-            } catch (error) {
-                alert('Error hiding question: ' + error.message);
             }
-        }
 
-        function updateCurrentQuestion(username, message) {
-            const display = document.getElementById('current-question-display');
-            display.innerHTML = `
+            function updateCurrentQuestion(username, message) {
+                const display = document.getElementById('current-question-display');
+                display.innerHTML = `
                 <div class="current-question">
                     <p><strong>Q:</strong> ${message}</p>
                     <p><em>— ${username}</em></p>
                 </div>
             `;
-        }
+            }
 
-        function clearCurrentQuestion() {
-            const display = document.getElementById('current-question-display');
-            display.innerHTML = '<p>No question selected. Click on a chat message to display it.</p>';
-        }
+            function clearCurrentQuestion() {
+                const display = document.getElementById('current-question-display');
+                display.innerHTML = '<p>No question selected. Click on a chat message to display it.</p>';
+            }
 
-        async function refreshQuestion() {
-            try {
-                const response = await fetch('/api/current_question');
-                const question = await response.json();
+            async function refreshQuestion() {
+                try {
+                    const response = await fetch('/api/current_question');
+                    const question = await response.json();
 
-                if (question && question.username && question.message) {
-                    updateCurrentQuestion(question.username, question.message);
-                } else {
+                    if (question && question.username && question.message) {
+                        updateCurrentQuestion(question.username, question.message);
+                    } else {
+                        clearCurrentQuestion();
+                    }
+                } catch (error) {
                     clearCurrentQuestion();
                 }
-            } catch (error) {
-                clearCurrentQuestion();
             }
-        }
 
-        setInterval(updateChat, 2000);
-        setInterval(refreshQuestion, 5000);
-        updateChat();
-        refreshQuestion();
+            setInterval(updateChat, 2000);
+            setInterval(refreshQuestion, 5000);
+            updateChat();
+            refreshQuestion();
 
-        // Dashboard data and chat send
-        async function loadData() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
+            // Dashboard data and chat send
+            async function loadData() {
+                try {
+                    const response = await fetch('/api/status');
+                    const data = await response.json();
 
-                // Update stream status
-                const streamStatus = document.getElementById('stream-status');
-                const streamLive = document.getElementById('stream-live');
+                    // Update stream status
+                    const streamStatus = document.getElementById('stream-status');
+                    const streamLive = document.getElementById('stream-live');
 
-                if (data.stream.live) {
-                    streamStatus.className = 'status-indicator status-live';
-                    streamLive.textContent = 'LIVE';
-                    document.getElementById('stream-title').textContent = data.stream.title || 'No Title';
-                    document.getElementById('stream-game').textContent = data.stream.game || 'No Game';
-                    document.getElementById('stream-viewers').textContent = data.stream.viewers.toLocaleString();
-                } else {
-                    streamStatus.className = 'status-indicator status-offline';
-                    streamLive.textContent = 'Offline';
-                    document.getElementById('stream-title').textContent = '-';
-                    document.getElementById('stream-game').textContent = '-';
-                    document.getElementById('stream-viewers').textContent = '0';
+                    if (data.stream.live) {
+                        streamStatus.className = 'status-indicator status-live';
+                        streamLive.textContent = 'LIVE';
+                        document.getElementById('stream-title').textContent = data.stream.title || 'No Title';
+                        document.getElementById('stream-game').textContent = data.stream.game || 'No Game';
+                        document.getElementById('stream-viewers').textContent = data.stream.viewers.toLocaleString();
+                    } else {
+                        streamStatus.className = 'status-indicator status-offline';
+                        streamLive.textContent = 'Offline';
+                        document.getElementById('stream-title').textContent = '-';
+                        document.getElementById('stream-game').textContent = '-';
+                        document.getElementById('stream-viewers').textContent = '0';
+                    }
+
+                    // Update last update time
+                    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+
+                } catch (error) {
+                    console.error('Error loading data:', error);
                 }
-
-                // Update last update time
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-
-                // Load stream history
-                await loadHistory();
-
-            } catch (error) {
-                console.error('Error loading data:', error);
             }
-        }
 
-        async function loadHistory() {
-            try {
-                const response = await fetch('/api/history');
-                const history = await response.json();
+            async function sendChatMessage() {
+                const input = document.getElementById('chat-message');
+                const response = document.getElementById('chat-response');
+                const message = input.value.trim();
 
-                const historyContainer = document.getElementById('stream-history');
-                historyContainer.innerHTML = '';
+                if (!message) return;
 
-                if (history.length === 0) {
-                    historyContainer.innerHTML = '<div class="history-item"><div class="history-title">No recent streams</div></div>';
+                try {
+                    const result = await fetch('/api/send_chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message })
+                    });
+
+                    const data = await result.json();
+
+                    if (data.success) {
+                        response.style.color = '#48bb78';
+                        response.textContent = '✓ Message sent successfully';
+                        input.value = '';
+                    } else {
+                        response.style.color = '#e53e3e';
+                        response.textContent = '✗ ' + (data.error || 'Failed to send message');
+                    }
+
+                    setTimeout(() => response.textContent = '', 3000);
+
+                } catch (error) {
+                    response.style.color = '#e53e3e';
+                    response.textContent = '✗ Connection error';
+                    setTimeout(() => response.textContent = '', 3000);
+                }
+            }
+
+            // Allow Enter key to send chat message
+            document.getElementById('chat-message').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    sendChatMessage();
+                }
+            });
+
+            // Bot Moderation Functions
+            function showBotStatus(message, type = 'info') {
+                const statusDiv = document.getElementById('bot-status-message');
+                statusDiv.className = `status-message status-${type}`;
+                statusDiv.textContent = message;
+
+                // Auto-clear after 5 seconds unless it's an error
+                if (type !== 'error') {
+                    setTimeout(() => {
+                        statusDiv.textContent = '';
+                        statusDiv.className = '';
+                    }, 5000);
+                }
+            }
+
+            function setButtonsDisabled(disabled) {
+                const buttons = document.querySelectorAll('.mod-button');
+                buttons.forEach(btn => btn.disabled = disabled);
+            }
+
+            async function checkBots() {
+                showBotStatus('Checking for bots...', 'warning');
+                setButtonsDisabled(true);
+
+                try {
+                    const response = await fetch('/api/check_bots', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        document.getElementById('known-bots').textContent = result.stats.total_known_bots;
+                        document.getElementById('last-check').textContent = new Date().toLocaleTimeString();
+                        showBotStatus(`Found ${result.stats.total_known_bots} known bots online`, 'success');
+                    } else {
+                        showBotStatus('Failed to fetch bot list: ' + (result.error || 'Unknown error'), 'error');
+                    }
+                } catch (error) {
+                    showBotStatus('Connection error: ' + error.message, 'error');
+                } finally {
+                    setButtonsDisabled(false);
+                }
+            }
+
+            async function timeoutBots() {
+                if (!confirm('Are you sure you want to timeout detected bots? This will timeout them for 5 minutes.')) {
                     return;
                 }
 
-                history.slice(-5).reverse().forEach(stream => {
-                    const item = document.createElement('div');
-                    item.className = 'history-item';
+                showBotStatus('Timing out bots...', 'warning');
+                setButtonsDisabled(true);
 
-                    const startTime = new Date(stream.started_at + 'Z').toLocaleString();
+                try {
+                    const response = await fetch('/api/moderate_bots', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'timeout', duration: 300 })
+                    });
 
-                    item.innerHTML = `
-                        <div class="history-title">${stream.title || 'Untitled Stream'}</div>
-                        <div class="history-meta">${stream.game || 'No Game'} • ${startTime}</div>
-                    `;
+                    const result = await response.json();
 
-                    historyContainer.appendChild(item);
-                });
-
-            } catch (error) {
-                console.error('Error loading history:', error);
+                    if (result.success) {
+                        showBotStatus(`Successfully timed out ${result.moderated_count} bots`, 'success');
+                    } else {
+                        showBotStatus('Moderation failed: ' + (result.error || 'Unknown error'), 'error');
+                    }
+                } catch (error) {
+                    showBotStatus('Connection error: ' + error.message, 'error');
+                } finally {
+                    setButtonsDisabled(false);
+                }
             }
-        }
 
-        async function sendChatMessage() {
-            const input = document.getElementById('chat-message');
-            const response = document.getElementById('chat-response');
-            const message = input.value.trim();
-
-            if (!message) return;
-
-            try {
-                const result = await fetch('/api/send_chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message })
-                });
-
-                const data = await result.json();
-
-                if (data.success) {
-                    response.style.color = '#48bb78';
-                    response.textContent = '✓ Message sent successfully';
-                    input.value = '';
-                } else {
-                    response.style.color = '#e53e3e';
-                    response.textContent = '✗ ' + (data.error || 'Failed to send message');
+            async function banBots() {
+                if (!confirm('Are you sure you want to BAN detected bots? This is a permanent action!')) {
+                    return;
                 }
 
-                setTimeout(() => response.textContent = '', 3000);
+                showBotStatus('Banning bots...', 'warning');
+                setButtonsDisabled(true);
 
-            } catch (error) {
-                response.style.color = '#e53e3e';
-                response.textContent = '✗ Connection error';
-                setTimeout(() => response.textContent = '', 3000);
+                try {
+                    const response = await fetch('/api/moderate_bots', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'ban' })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showBotStatus(`Successfully banned ${result.moderated_count} bots`, 'success');
+                    } else {
+                        showBotStatus('Moderation failed: ' + (result.error || 'Unknown error'), 'error');
+                    }
+                } catch (error) {
+                    showBotStatus('Connection error: ' + error.message, 'error');
+                } finally {
+                    setButtonsDisabled(false);
+                }
             }
-        }
 
-        // Allow Enter key to send chat message
-        document.getElementById('chat-message').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                sendChatMessage();
+            // Auto-check bots on page load
+            setTimeout(checkBots, 2000);
+
+            // ========== NEW DASHBOARD FUNCTIONS ==========
+
+            // OBS Scene Control Functions
+            async function loadOBSScenes() {
+                try {
+                    const response = await fetch('/api/obs_scenes');
+                    const result = await response.json();
+
+                    const obsStatus = document.getElementById('obs-status');
+                    const sceneButtons = document.getElementById('scene-buttons');
+
+                    if (result.success) {
+                        obsStatus.textContent = `OBS Connected - Current: ${result.current_scene}`;
+                        obsStatus.style.background = '#27ae60';
+
+                        sceneButtons.innerHTML = '';
+                        // Filter to only show scenes that start with "Scene - " and reverse the order
+                        const mainScenes = result.scenes.filter(scene => scene.startsWith('Scene - ')).reverse();
+                        mainScenes.forEach(scene => {
+                            const button = document.createElement('button');
+                            button.className = `scene-button ${scene === result.current_scene ? 'active' : ''}`;
+                            button.textContent = scene;
+                            button.onclick = () => changeScene(scene);
+                            sceneButtons.appendChild(button);
+                        });
+                    } else {
+                        obsStatus.textContent = 'OBS Not Connected';
+                        obsStatus.style.background = '#e74c3c';
+                    }
+                } catch (error) {
+                    const obsStatus = document.getElementById('obs-status');
+                    obsStatus.textContent = 'OBS Connection Error';
+                    obsStatus.style.background = '#e74c3c';
+                }
             }
-        });
 
-        // Load data on page load
-        loadData();
+            async function changeScene(sceneName) {
+                try {
+                    const response = await fetch('/api/obs_scene', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ scene_name: sceneName })
+                    });
 
-        // Auto refresh every 30 seconds
-        setInterval(loadData, 30000);
-    </script>
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // Update active scene button
+                        document.querySelectorAll('.scene-button').forEach(btn => {
+                            btn.classList.remove('active');
+                            if (btn.textContent === sceneName) {
+                                btn.classList.add('active');
+                            }
+                        });
+                        showMessage('obs-status', result.message, 'success');
+                    } else {
+                        showMessage('obs-status', 'Failed to change scene: ' + result.error, 'error');
+                    }
+                } catch (error) {
+                    showMessage('obs-status', 'Connection error: ' + error.message, 'error');
+                }
+            }
+
+            async function toggleQnASource(enabled) {
+                try {
+                    const response = await fetch('/api/obs_toggle_source', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            scene_name: 'Scene - In Game',
+                            source_name: 'QnA_Text',
+                            enabled: enabled
+                        })
+                    });
+
+                    const result = await response.json();
+                    showMessage('obs-status', result.message || (enabled ? 'Q&A Shown' : 'Q&A Hidden'), result.success ? 'success' : 'error');
+                } catch (error) {
+                    showMessage('obs-status', 'Error toggling Q&A: ' + error.message, 'error');
+                }
+            }
+
+            // Quick Messages Functions
+            async function sendQuickMessage(messageType) {
+                try {
+                    showMessage('quick-message-status', 'Sending message...', 'warning');
+
+                    const response = await fetch('/api/quick_messages', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: messageType })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showMessage('quick-message-status', result.message, 'success');
+                    } else {
+                        showMessage('quick-message-status', 'Failed: ' + result.error, 'error');
+                    }
+                } catch (error) {
+                    showMessage('quick-message-status', 'Connection error: ' + error.message, 'error');
+                }
+            }
+
+            // Stream Control Functions
+            async function forceNotification() {
+                try {
+                    showMessage('stream-control-status', 'Sending notification...', 'warning');
+
+                    const response = await fetch('/api/force_notification', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    const result = await response.json();
+                    showMessage('stream-control-status', result.message, result.success ? 'success' : 'error');
+                } catch (error) {
+                    showMessage('stream-control-status', 'Connection error: ' + error.message, 'error');
+                }
+            }
+
+            async function testNotification() {
+                try {
+                    showMessage('stream-control-status', 'Sending test notification...', 'warning');
+
+                    const response = await fetch('/api/test_notification', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    const result = await response.json();
+                    showMessage('stream-control-status', result.message, result.success ? 'success' : 'error');
+                } catch (error) {
+                    showMessage('stream-control-status', 'Connection error: ' + error.message, 'error');
+                }
+            }
+
+            async function refreshBotToken() {
+                try {
+                    showMessage('stream-control-status', 'Refreshing token...', 'warning');
+
+                    const response = await fetch('/api/refresh_token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    const result = await response.json();
+                    showMessage('stream-control-status', result.message, result.success ? 'success' : 'error');
+                } catch (error) {
+                    showMessage('stream-control-status', 'Connection error: ' + error.message, 'error');
+                }
+            }
+
+            // System Status Functions
+            async function testChatConnection() {
+                try {
+                    showMessage('system-status-message', 'Testing chat connection...', 'warning');
+
+                    const response = await fetch('/api/test_chat');
+                    const result = await response.json();
+                    showMessage('system-status-message', result.message, result.success ? 'success' : 'error');
+                } catch (error) {
+                    showMessage('system-status-message', 'Connection error: ' + error.message, 'error');
+                }
+            }
+
+            async function pingDashboard() {
+                try {
+                    showMessage('system-status-message', 'Pinging dashboard...', 'warning');
+
+                    const response = await fetch('/api/ping');
+                    const result = await response.json();
+                    showMessage('system-status-message', result.message, 'success');
+                } catch (error) {
+                    showMessage('system-status-message', 'Dashboard unreachable: ' + error.message, 'error');
+                }
+            }
+
+            // System Status Updates
+            async function updateSystemStatus() {
+                try {
+                    // Check Discord status
+                    const discordResponse = await fetch('/api/discord_stats');
+                    const discordData = await discordResponse.json();
+
+                    const systemDiscordStatus = document.getElementById('system-discord-status');
+                    const discordMembers = document.getElementById('discord-members');
+                    const discordServerMembers = document.getElementById('discord-server-members');
+
+                    if (discordData.success && discordData.stats.bot_connected) {
+                        systemDiscordStatus.className = 'status-dot online';
+                        if (discordMembers) discordMembers.textContent = discordData.stats.online_members;
+                        if (discordServerMembers) discordServerMembers.textContent = discordData.stats.total_members || '-';
+                    } else {
+                        systemDiscordStatus.className = 'status-dot offline';
+                        if (discordMembers) discordMembers.textContent = '0';
+                        if (discordServerMembers) discordServerMembers.textContent = '-';
+                    }
+
+                    // Test Twitch chat connection
+                    const twitchResponse = await fetch('/api/test_chat');
+                    const twitchData = await twitchResponse.json();
+
+                    const systemTwitchStatus = document.getElementById('system-twitch-status');
+                    systemTwitchStatus.className = twitchData.success ? 'status-dot online' : 'status-dot offline';
+
+                    // Check OBS connection
+                    const obsResponse = await fetch('/api/obs_scenes');
+                    const obsData = await obsResponse.json();
+
+                    const systemObsStatus = document.getElementById('system-obs-status');
+                    systemObsStatus.className = obsData.success ? 'status-dot online' : 'status-dot offline';
+
+                    // Update stream status
+                    const streamStatusResponse = await fetch('/api/stream_status');
+                    const streamData = await streamStatusResponse.json();
+
+                    const streamStatusDot = document.getElementById('stream-status');
+                    if (streamStatusDot) {
+                        streamStatusDot.className = streamData.success && streamData.is_live ? 'status-dot online' : 'status-dot offline';
+                        streamStatusDot.textContent = streamData.is_live ? '🔴 LIVE' : '⚫ OFF';
+                    }
+
+                } catch (error) {
+                    console.error('Error updating system status:', error);
+                    // Set all to offline on error
+                    const systemDiscordStatus = document.getElementById('system-discord-status');
+                    const systemTwitchStatus = document.getElementById('system-twitch-status');
+                    const systemObsStatus = document.getElementById('system-obs-status');
+
+                    if (systemDiscordStatus) systemDiscordStatus.className = 'status-dot offline';
+                    if (systemTwitchStatus) systemTwitchStatus.className = 'status-dot offline';
+                    if (systemObsStatus) systemObsStatus.className = 'status-dot offline';
+                }
+            }
+
+            // Utility function for showing messages
+            function showMessage(elementId, message, type) {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.textContent = message;
+                    element.className = `status-message ${type}-message`;
+
+                    // Clear message after 5 seconds for success/error, 3 seconds for warning
+                    const timeout = type === 'warning' ? 3000 : 5000;
+                    setTimeout(() => {
+                        element.textContent = '';
+                        element.className = '';
+                    }, timeout);
+                }
+            }
+
+            // Initialize new dashboard features
+            async function initializeDashboard() {
+                await loadOBSScenes();
+                await updateSystemStatus();
+            }
+
+            // Load data on page load
+            loadData();
+
+            // Initialize new features
+            setTimeout(initializeDashboard, 1000);
+
+            // Auto refresh every 60 seconds (reduced from 30 to minimize jumping)
+            setInterval(loadData, 60000);
+            // Update system status less frequently (reduced from 15 to 30 seconds)
+            setInterval(updateSystemStatus, 30000);
+        </script>
 </body>
 
 </html>

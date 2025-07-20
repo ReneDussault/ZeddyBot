@@ -30,6 +30,7 @@ class DashboardData:
         self.chat_messages = deque(maxlen=100)
         self.chat_sock = None
         self.current_question = {}
+        self.qna_theme = "default"  # Store current Q&A theme
         self.obs_client = None
         self.connect_obs()
         self.start_chat_reader()
@@ -260,11 +261,69 @@ class DashboardData:
         except Exception as e:
             return False, f"OBS error: {str(e)}"
 
+    # Enhanced Q&A methods for Browser Source (styled)
+    def display_question_on_obs_browser(self, username, message):
+        """Display Q&A using browser source (recommended for better styling)"""
+        if not self.obs_client:
+            return False, "OBS not connected"
+        try:
+            # Store the question data (browser source will fetch it via API)
+            self.current_question = {
+                'username': username,
+                'message': message,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Enable the browser source scene item
+            self.obs_client.set_scene_item_enabled(
+                scene_name="Scene - In Game",  # Your OBS scene name
+                item_id=73,                     # Your QnA browser source item ID (different from text source)
+                enabled=True                   # Enable the item
+            )
+
+            return True, "Styled question displayed on stream"
+        except Exception as e:
+            return False, f"OBS browser source error: {str(e)}"
+
+    def hide_question_on_obs_browser(self):
+        """Hide Q&A browser source"""
+        if not self.obs_client:
+            return False, "OBS not connected"
+        try:
+            # Clear the question data
+            self.current_question = {}
+            
+            # Browser source will auto-hide when no question is available
+            # But we can also disable the source entirely if preferred
+            # self.obs_client.set_scene_item_enabled(
+            #     scene_name="Scene - In Game",
+            #     item_id=73,  # Your QnA browser source item ID
+            #     enabled=False
+            # )
+
+            return True, "Styled question hidden"
+        except Exception as e:
+            return False, f"OBS browser source error: {str(e)}"
+
+    def set_qna_theme(self, theme="default"):
+        """Set the Q&A display theme (default, green, blue, red, orange)"""
+        valid_themes = ['default', 'green', 'blue', 'red', 'orange']
+        if theme not in valid_themes:
+            return False, f"Invalid theme. Valid options: {valid_themes}"
+        
+        self.qna_theme = theme
+        print(f"Q&A theme changed to: {theme}")
+        return True, f"Theme set to {theme}"
+
 dashboard_data = DashboardData()
 
 @app.route('/')
 def index():
     return render_template('dashboardqa.html')
+
+@app.route('/qna')
+def qna_display():
+    return render_template('qna_display.html')
 
 @app.route('/api/status')
 def api_status():
@@ -398,23 +457,52 @@ def display_question():
     message = data.get('message', '')
     if not username or not message:
         return jsonify({"success": False, "error": "Missing username or message"})
+    
+    # Store question data for browser source
     dashboard_data.current_question = {
         'username': username,
         'message': message,
         'timestamp': datetime.now().isoformat()
     }
-    ok, msg = dashboard_data.display_question_on_obs(username, message)
+    
+    # Try browser source first (styled), fallback to text source
+    ok, msg = dashboard_data.display_question_on_obs_browser(username, message)
+    if not ok:
+        # Fallback to plain text source
+        ok, msg = dashboard_data.display_question_on_obs(username, message)
+    
     return jsonify({"success": ok, "message": msg})
 
 @app.route('/api/hide_question', methods=['POST'])
 def hide_question():
     dashboard_data.current_question = {}
-    ok, msg = dashboard_data.hide_question_on_obs()
-    return jsonify({"success": ok, "message": msg})
+    # Try to hide both browser source and text source
+    ok1, msg1 = dashboard_data.hide_question_on_obs_browser()
+    ok2, msg2 = dashboard_data.hide_question_on_obs()
+    
+    # Return success if either worked
+    success = ok1 or ok2
+    message = msg1 if ok1 else msg2
+    return jsonify({"success": success, "message": message})
 
 @app.route('/api/current_question')
 def get_current_question():
-    return jsonify(dashboard_data.current_question)
+    # Include the current theme with the question data
+    question_data = dashboard_data.current_question.copy() if dashboard_data.current_question else {}
+    question_data['theme'] = dashboard_data.qna_theme
+    return jsonify(question_data)
+
+@app.route('/api/qna_theme', methods=['POST'])
+def set_qna_theme():
+    data = request.json
+    theme = data.get('theme', 'default') if data else 'default'
+    valid_themes = ['default', 'green', 'blue', 'red', 'orange']
+    
+    if theme not in valid_themes:
+        return jsonify({"success": False, "error": f"Invalid theme. Valid options: {valid_themes}"})
+    
+    ok, msg = dashboard_data.set_qna_theme(theme)
+    return jsonify({"success": ok, "message": msg, "theme": theme})
 
 # Bot moderation endpoints for Stream Deck integration
 @app.route('/api/check_bots', methods=['POST'])

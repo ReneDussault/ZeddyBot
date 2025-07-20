@@ -664,6 +664,17 @@
                     <button class="btn" onclick="hideQuestion()" style="background: #e74c3c;">Hide Question</button>
                     <button class="btn" onclick="refreshQuestion()" style="background: #3498db;">Refresh</button>
                 </div>
+                <div style="margin-top: 1rem;">
+                    <h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; color: white;">Q&A Theme:</h3>
+                    <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+                        <button onclick="setQnaTheme('default')" style="background: #9146ff; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Purple</button>
+                        <button onclick="setQnaTheme('green')" style="background: #48bb78; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Green</button>
+                        <button onclick="setQnaTheme('blue')" style="background: #3498db; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Blue</button>
+                        <button onclick="setQnaTheme('red')" style="background: #e74c3c; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Red</button>
+                        <button onclick="setQnaTheme('orange')" style="background: #f39c12; color: white; border: none; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.7rem;">Orange</button>
+                    </div>
+                </div>
+                <div id="qna-theme-status" style="margin-top: 0.5rem; font-size: 0.8rem;"></div>
             </div>
 
             <!-- OBS Scene Control Card - Takes half of 4th column -->
@@ -791,6 +802,35 @@
                     }
                 } catch (error) {
                     clearCurrentQuestion();
+                }
+            }
+
+            async function setQnaTheme(theme) {
+                try {
+                    const response = await fetch('/api/qna_theme', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ theme: theme })
+                    });
+
+                    const result = await response.json();
+                    const statusDiv = document.getElementById('qna-theme-status');
+                    
+                    if (result.success) {
+                        statusDiv.style.color = '#48bb78';
+                        statusDiv.textContent = `✓ Theme set to ${result.theme}`;
+                    } else {
+                        statusDiv.style.color = '#e53e3e';
+                        statusDiv.textContent = '✗ ' + (result.error || 'Failed to set theme');
+                    }
+
+                    setTimeout(() => statusDiv.textContent = '', 3000);
+
+                } catch (error) {
+                    const statusDiv = document.getElementById('qna-theme-status');
+                    statusDiv.style.color = '#e53e3e';
+                    statusDiv.textContent = '✗ Connection error';
+                    setTimeout(() => statusDiv.textContent = '', 3000);
                 }
             }
 

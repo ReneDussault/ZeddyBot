@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q&A Display</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: transparent;
+            color: white;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .qna-container {
+            background: linear-gradient(135deg, rgba(145, 70, 255, 0.95) 0%, rgba(119, 44, 232, 0.95) 100%);
+            border-radius: 20px;
+            padding: 2rem 2.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            max-width: 90vw;
+            min-width: 400px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .qna-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%, rgba(255, 255, 255, 0.1) 100%);
+            pointer-events: none;
+        }
+
+        .qna-header {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #ffe066;
+            margin-bottom: 1rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .qna-question {
+            font-size: 1.8rem;
+            font-weight: 600;
+            line-height: 1.4;
+            color: white;
+            margin-bottom: 1.5rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            position: relative;
+            z-index: 1;
+        }
+
+        .qna-author {
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: #00fff7;
+            font-style: italic;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+            position: relative;
+            z-index: 1;
+        }
+
+        .qna-author::before {
+            content: '— ';
+            color: #ffe066;
+        }
+
+        /* Animation for when question appears */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .qna-container.show {
+            animation: slideIn 0.5s ease-out;
+        }
+
+        /* Hide state */
+        .qna-container.hidden {
+            display: none;
+        }
+
+        /* Pulse animation for emphasis */
+        @keyframes pulse {
+            0%, 100% { 
+                box-shadow: 0 8px 32px rgba(145, 70, 255, 0.3);
+            }
+            50% { 
+                box-shadow: 0 8px 40px rgba(145, 70, 255, 0.6);
+            }
+        }
+
+        .qna-container.pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        /* Alternative color schemes */
+        .qna-container.theme-green {
+            background: linear-gradient(135deg, rgba(72, 187, 120, 0.95) 0%, rgba(56, 161, 105, 0.95) 100%);
+        }
+
+        .qna-container.theme-blue {
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.95) 0%, rgba(41, 128, 185, 0.95) 100%);
+        }
+
+        .qna-container.theme-red {
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.95) 0%, rgba(192, 57, 43, 0.95) 100%);
+        }
+
+        .qna-container.theme-orange {
+            background: linear-gradient(135deg, rgba(243, 156, 18, 0.95) 0%, rgba(211, 84, 0, 0.95) 100%);
+        }
+    </style>
+</head>
+<body>
+    <div class="qna-container hidden" id="qnaContainer">
+        <div class="qna-header">
+            <span>💬</span>
+            Q&A
+        </div>
+        <div class="qna-question" id="qnaQuestion">
+            No question selected
+        </div>
+        <div class="qna-author" id="qnaAuthor">
+            Select a question from chat
+        </div>
+    </div>
+
+    <script>
+        let currentQuestion = null;
+        let refreshInterval;
+
+        async function refreshQuestion() {
+            try {
+                const response = await fetch('/api/current_question');
+                const question = await response.json();
+
+                const container = document.getElementById('qnaContainer');
+                const questionEl = document.getElementById('qnaQuestion');
+                const authorEl = document.getElementById('qnaAuthor');
+
+                // Apply theme if provided
+                if (question.theme) {
+                    setTheme(question.theme);
+                }
+
+                if (question && question.username && question.message) {
+                    // Update content
+                    questionEl.textContent = question.message;
+                    authorEl.textContent = question.username;
+                    
+                    // Show container with animation
+                    container.classList.remove('hidden');
+                    container.classList.add('show');
+                    
+                    // Add pulse effect if question changed
+                    if (!currentQuestion || currentQuestion.message !== question.message) {
+                        container.classList.add('pulse');
+                        setTimeout(() => container.classList.remove('pulse'), 4000);
+                    }
+                    
+                    currentQuestion = question;
+                } else {
+                    // Hide container
+                    container.classList.add('hidden');
+                    container.classList.remove('show', 'pulse');
+                    currentQuestion = null;
+                }
+            } catch (error) {
+                console.error('Error fetching question:', error);
+                // Don't hide on error, keep showing last question
+            }
+        }
+
+        // Refresh every 2 seconds
+        refreshInterval = setInterval(refreshQuestion, 2000);
+        
+        // Initial load
+        refreshQuestion();
+
+        // Listen for page visibility changes to pause/resume when OBS source is hidden/shown
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                clearInterval(refreshInterval);
+            } else {
+                refreshInterval = setInterval(refreshQuestion, 2000);
+                refreshQuestion(); // Immediate refresh when becoming visible
+            }
+        });
+
+        // Theme switching function (can be called from OBS or externally)
+        function setTheme(theme) {
+            const container = document.getElementById('qnaContainer');
+            // Remove existing theme classes
+            container.classList.remove('theme-green', 'theme-blue', 'theme-red', 'theme-orange');
+            // Add new theme if specified
+            if (theme && theme !== 'default') {
+                container.classList.add(`theme-${theme}`);
+            }
+        }
+
+        // Make theme function available globally
+        window.setTheme = setTheme;
+    </script>
+</body>
+</html>

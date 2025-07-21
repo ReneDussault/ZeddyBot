@@ -150,10 +150,10 @@ class TwitchAPI:
 
     def refresh_bot_token(self):
 
-        success, message, new_token = refresh_twitch_bot_token("../config.json")
+        success, message, new_token = refresh_twitch_bot_token("./config.json")
         if success:
             # Reload config to get the updated token
-            with open("../config.json") as config_file:
+            with open("./config.json") as config_file:
                 self.data = json.load(config_file)
             print(message)
             return True

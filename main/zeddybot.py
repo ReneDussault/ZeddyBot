@@ -29,13 +29,13 @@ def now():
 class Config:
     def __init__(self, config_path=None):
         if config_path is None:
-            config_path = "config.json"
+            config_path = "../config.json"
 
         with open(config_path) as config_file:
             self.data = json.load(config_file)
 
     def save(self):
-        with open("config.json", "w") as f:
+        with open("../config.json", "w") as f:
             json.dump(self.data, f)
 
 
@@ -145,10 +145,10 @@ class TwitchAPI:
 
     def refresh_bot_token(self):
 
-        success, message, new_token = refresh_twitch_bot_token()
+        success, message, new_token = refresh_twitch_bot_token("../config.json")
         if success:
             # Reload config to get the updated token
-            with open("config.json") as config_file:
+            with open("../config.json") as config_file:
                 self.data = json.load(config_file)
             print(message)
             return True

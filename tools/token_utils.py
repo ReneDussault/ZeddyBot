@@ -8,7 +8,7 @@ import requests
 from datetime import datetime
 
 
-def refresh_twitch_bot_token(config_path="config.json"):
+def refresh_twitch_bot_token(config_path="../config.json"):
     """
     Refresh Twitch bot access token using refresh token
     
@@ -73,7 +73,7 @@ def refresh_twitch_bot_token(config_path="config.json"):
         return False, error_msg, None
 
 
-def get_current_bot_token(config_path="config.json"):
+def get_current_bot_token(config_path="../config.json"):
     """
     Get current bot access token from config
     
@@ -92,7 +92,7 @@ def get_current_bot_token(config_path="config.json"):
         return None
 
 
-def validate_bot_token(token, config_path="config.json"):
+def validate_bot_token(token, config_path="../config.json"):
     """
     Validate if the bot token is still valid by making a test API call
     

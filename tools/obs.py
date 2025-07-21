@@ -6,7 +6,7 @@ import json
 
 
 def test_connection():
-    config_path = "config.json"
+    config_path = "../config.json"
 
     with open(config_path) as f:
             config = json.load(f)

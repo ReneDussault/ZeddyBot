@@ -10,6 +10,11 @@ import time
 import socket
 import select
 from collections import deque
+import sys
+import os
+
+# Add parent directory to path to import from tools
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import our shared token utility
 from tools.token_utils import refresh_twitch_bot_token, validate_bot_token, get_current_bot_token

@@ -12,6 +12,11 @@ from typing import Optional
 import logging
 from flask import Flask, jsonify, request
 import threading
+import sys
+import os
+
+# Add parent directory to path to import from tools
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import our shared token utility
 from tools.token_utils import refresh_twitch_bot_token

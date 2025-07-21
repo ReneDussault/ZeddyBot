@@ -28,6 +28,11 @@ except ImportError:
 app = Flask(__name__, template_folder='../templates')
 CORS(app)  # Enable CORS for all routes
 
+# Disable Flask request logging for successful requests
+import logging
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
 class DashboardData:
     def __init__(self, config_path="./config.json"):
         self.config_path = config_path

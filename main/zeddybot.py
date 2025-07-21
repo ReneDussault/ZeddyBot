@@ -14,10 +14,10 @@ from flask import Flask, jsonify, request
 import threading
 
 # Import our shared token utility
-from token_utils import refresh_twitch_bot_token
+from tools.token_utils import refresh_twitch_bot_token
 
 # Import our bot moderation module
-from bot_moderation import BotModerationManager
+from tools.bot_moderation import BotModerationManager
 
 logging.getLogger("discord").setLevel(logging.WARNING)
 

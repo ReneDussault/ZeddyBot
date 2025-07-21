@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from bot_moderation import BotModerationManager
+from tools.bot_moderation import BotModerationManager
 import requests
 
 # Test the APIs directly

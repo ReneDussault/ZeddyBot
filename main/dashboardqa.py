@@ -12,7 +12,7 @@ import select
 from collections import deque
 
 # Import our shared token utility
-from token_utils import refresh_twitch_bot_token, validate_bot_token, get_current_bot_token
+from tools.token_utils import refresh_twitch_bot_token, validate_bot_token, get_current_bot_token
 
 # OBS WebSocket v5 (obsws-python)
 try:

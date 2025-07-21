@@ -1217,7 +1217,8 @@
                     if (discordData.success && discordData.stats.bot_connected) {
                         systemDiscordStatus.className = 'status-dot online';
                         if (discordMembers) discordMembers.textContent = discordData.stats.online_members;
-                        if (discordServerMembers) discordServerMembers.textContent = discordData.stats.total_members || '-';
+                        // Use total_humans to exclude bots from the count, or total_members to include everything
+                        if (discordServerMembers) discordServerMembers.textContent = discordData.stats.total_humans || discordData.stats.total_members || '-';
                     } else {
                         systemDiscordStatus.className = 'status-dot offline';
                         if (discordMembers) discordMembers.textContent = '0';

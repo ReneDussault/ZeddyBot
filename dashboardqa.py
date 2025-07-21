@@ -828,19 +828,29 @@ def get_stream_status():
 
 @app.route('/api/discord_stats', methods=['GET'])
 def get_discord_stats():
-    """Get Discord server stats"""
+    """Get Discord server stats from the Discord bot"""
     try:
-        # Try to get real Discord stats by checking if the Discord bot is running
-        # This is a placeholder - in a real implementation, you'd integrate with the Discord bot
+        # Try to get real Discord stats from the Discord bot's API
+        try:
+            response = requests.get("http://127.0.0.1:5001/api/discord_stats", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("success"):
+                    return jsonify(data)
+        except requests.exceptions.RequestException:
+            # Discord bot API not available, return fallback data
+            pass
         
-        # For now, let's return some realistic test data when bot should be connected
+        # Fallback when Discord bot is not running or API is unavailable
         return jsonify({
-            "success": True,
+            "success": False,
             "stats": {
-                "online_members": 4,  # You mentioned 4 people are online
-                "total_members": 12,  # Estimate based on typical server size
-                "bot_connected": True  # Assume connected if dashboard is running
-            }
+                "online_members": 0,
+                "total_members": 0,
+                "total_humans": 0,
+                "bot_connected": False
+            },
+            "error": "Discord bot not connected (start zeddybot.py)"
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})

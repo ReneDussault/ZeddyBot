@@ -1,9 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Q&A Display</title>
+    <title>🤖 Q&A Display - ZeddyBot</title>
+
+    <!-- Favicon using emoji -->
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+
     <style>
         * {
             margin: 0;
@@ -92,6 +98,7 @@
                 opacity: 0;
                 transform: translateY(30px) scale(0.95);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0) scale(1);
@@ -109,10 +116,13 @@
 
         /* Pulse animation for emphasis */
         @keyframes pulse {
-            0%, 100% { 
+
+            0%,
+            100% {
                 box-shadow: 0 8px 32px rgba(145, 70, 255, 0.3);
             }
-            50% { 
+
+            50% {
                 box-shadow: 0 8px 40px rgba(145, 70, 255, 0.6);
             }
         }
@@ -139,6 +149,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="qna-container hidden" id="qnaContainer">
         <div class="qna-header">
@@ -175,17 +186,17 @@
                     // Update content
                     questionEl.textContent = question.message;
                     authorEl.textContent = question.username;
-                    
+
                     // Show container with animation
                     container.classList.remove('hidden');
                     container.classList.add('show');
-                    
+
                     // Add pulse effect if question changed
                     if (!currentQuestion || currentQuestion.message !== question.message) {
                         container.classList.add('pulse');
                         setTimeout(() => container.classList.remove('pulse'), 4000);
                     }
-                    
+
                     currentQuestion = question;
                 } else {
                     // Hide container
@@ -201,12 +212,12 @@
 
         // Refresh every 2 seconds
         refreshInterval = setInterval(refreshQuestion, 2000);
-        
+
         // Initial load
         refreshQuestion();
 
         // Listen for page visibility changes to pause/resume when OBS source is hidden/shown
-        document.addEventListener('visibilitychange', function() {
+        document.addEventListener('visibilitychange', function () {
             if (document.hidden) {
                 clearInterval(refreshInterval);
             } else {
@@ -230,4 +241,5 @@
         window.setTheme = setTheme;
     </script>
 </body>
+
 </html>

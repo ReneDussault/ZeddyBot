@@ -34,13 +34,13 @@ def now():
 class Config:
     def __init__(self, config_path=None):
         if config_path is None:
-            config_path = "../config.json"
+            config_path = "./config.json"
 
         with open(config_path) as config_file:
             self.data = json.load(config_file)
 
     def save(self):
-        with open("../config.json", "w") as f:
+        with open("./config.json", "w") as f:
             json.dump(self.data, f)
 
 

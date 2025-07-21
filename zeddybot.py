@@ -13,6 +13,9 @@ import logging
 from flask import Flask, jsonify, request
 import threading
 
+# Import our shared token utility
+from token_utils import refresh_twitch_bot_token
+
 # Import our bot moderation module
 from bot_moderation import BotModerationManager
 
@@ -142,31 +145,15 @@ class TwitchAPI:
 
     def refresh_bot_token(self):
 
-        if not self.config.twitch_bot_refresh_token:
-            print("No refresh token available for bot account")
-            return False
-
-        params = {
-            "client_id": self.config.twitch_bot_client_id,
-            "client_secret": self.config.twitch_bot_secret,
-            "grant_type": "refresh_token",
-            "refresh_token": self.config.twitch_bot_refresh_token,
-        }
-
-        try:
-            response = requests.post("https://id.twitch.tv/oauth2/token", params=params)
-            if response.status_code == 200:
-                data = response.json()
-                self.config.twitch_bot_access_token = data["access_token"]
-                self.config.twitch_bot_refresh_token = data["refresh_token"]
-                self.config.save()
-                print(f"[{now()}] Refreshed bot access token ")
-                return True
-            else:
-                print(f"Failed to refresh bot token: {response.text}")
-                return False
-        except Exception as e:
-            print(f"Error refreshing bot token: {e}")
+        success, message, new_token = refresh_twitch_bot_token()
+        if success:
+            # Reload config to get the updated token
+            with open("config.json") as config_file:
+                self.data = json.load(config_file)
+            print(message)
+            return True
+        else:
+            print(message)
             return False
 
 
@@ -771,6 +758,9 @@ class ZeddyBot(commands.Bot):
 
             print(f"[{now()}] ZeddyBot is connected to Discord ")
             
+            # Initialize Discord stats cache
+            await self.update_discord_stats()
+            
             self.update_token_task.start()
             self.update_bot_token_task.start()
             self.check_twitch_online_streamers.start()
@@ -783,12 +773,20 @@ class ZeddyBot(commands.Bot):
         async def update_live_role_member(before, after):
             await self.log_activity_changes(before, after)
             await self._handle_live_role_update(before, after)
+            
+            # Update Discord stats if online status changed
+            if before.status != after.status:
+                await self.update_discord_stats()
 
 
         @self.listen("on_presence_update")
         async def update_live_role_presence(before, after):
             await self.log_activity_changes(before, after)
             await self._handle_live_role_update(before, after)
+            
+            # Update Discord stats if online status changed
+            if before.status != after.status:
+                await self.update_discord_stats()
 
 
         @self.event
@@ -808,7 +806,45 @@ class ZeddyBot(commands.Bot):
                     self.loop.create_task(self._upgrade_role_after_delay(member))
             else:
                 print(f"[{now()}] ERROR: Drifters role with ID {self.DRIFTERS_ROLE_ID} not found!")
+            
+            # Update Discord stats in real-time
+            await self.update_discord_stats()
 
+        @self.event
+        async def on_member_remove(self, member):
+            print(f"[{now()}] {member} has left the server")
+            
+            # Update Discord stats in real-time
+            await self.update_discord_stats()
+
+
+    async def update_discord_stats(self):
+        """Update Discord stats in real-time and notify dashboard"""
+        try:
+            if not self.guilds:
+                return
+            
+            guild = self.guilds[0]  # Assuming first guild
+            
+            # Count members and filter out bots
+            total_members = guild.member_count
+            human_members = len([m for m in guild.members if not m.bot])
+            online_members = len([m for m in guild.members if m.status != discord.Status.offline and not m.bot])
+            
+            # Store stats for API endpoint
+            self._discord_stats = {
+                'total_members': total_members,
+                'total_humans': human_members,
+                'online_members': online_members,
+                'bot_connected': self.is_ready(),
+                'guild_name': guild.name,
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            print(f"[{now()}] Discord stats updated: {human_members} humans, {online_members} online")
+            
+        except Exception as e:
+            print(f"[{now()}] Error updating Discord stats: {e}")
 
     async def log_activity_changes(self, before, after):
         before_activities = set((a.type, getattr(a, 'name', None)) for a in before.activities)
@@ -967,9 +1003,16 @@ app = Flask(__name__)
 
 @app.route('/api/discord_stats')
 def discord_stats():
-    """Return Discord server member statistics"""
+    """Return Discord server member statistics using cached real-time data"""
     try:
-        # Get the first (and probably only) guild this bot is in
+        # Use cached stats if available (updated in real-time)
+        if hasattr(bot, '_discord_stats'):
+            return jsonify({
+                "success": True,
+                "stats": bot._discord_stats
+            })
+        
+        # Fallback to direct calculation if cache not available
         guilds = bot.guilds
         if not guilds:
             return jsonify({"success": False, "error": "Bot not in any Discord servers"})
@@ -993,7 +1036,8 @@ def discord_stats():
                 "total_humans": total_humans,
                 "online_members": online_members,
                 "bot_connected": True,
-                "guild_name": guild.name
+                "guild_name": guild.name,
+                "last_updated": datetime.now().isoformat()
             }
         })
     except Exception as e:

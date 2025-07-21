@@ -11,6 +11,9 @@ import socket
 import select
 from collections import deque
 
+# Import our shared token utility
+from token_utils import refresh_twitch_bot_token, validate_bot_token, get_current_bot_token
+
 # OBS WebSocket v5 (obsws-python)
 try:
     from obsws_python import ReqClient
@@ -45,33 +48,15 @@ class DashboardData:
             json.dump(self.config, f, indent=2)
 
     def refresh_bot_token(self):
-        """Refresh the Twitch bot access token using refresh token"""
-        if not self.config.get('twitch_bot_refresh_token'):
-            print("No refresh token available for bot account")
-            return False
-
-        params = {
-            "client_id": self.config.get('twitch_bot_client_id', ''),
-            "client_secret": self.config.get('twitch_bot_secret', ''),
-            "grant_type": "refresh_token",
-            "refresh_token": self.config['twitch_bot_refresh_token'],
-        }
-
-        try:
-            response = requests.post("https://id.twitch.tv/oauth2/token", params=params)
-            if response.status_code == 200:
-                data = response.json()
-                self.config['twitch_bot_access_token'] = data["access_token"]
-                self.config['twitch_bot_refresh_token'] = data["refresh_token"]
-                self.save_config()
-                print(f"[DASHBOARD] Refreshed bot access token")
-                return True
-            else:
-                print(f"Failed to refresh bot token: {response.text}")
-                return False
-        except Exception as e:
-            print(f"Error refreshing bot token: {e}")
-            return False
+        """Refresh the Twitch bot access token using shared utility"""
+        success, message, new_token = refresh_twitch_bot_token(self.config_path)
+        if success:
+            # Reload config to get the updated token
+            self.load_config()
+            print(f"[DASHBOARD] {message}")
+        else:
+            print(f"[DASHBOARD] {message}")
+        return success
 
     def connect_obs(self):
         """Connect to OBS WebSocket v5 using ReqClient"""
@@ -375,11 +360,25 @@ def send_chat():
         print("[CHAT] Missing target_channel")
         return jsonify({"success": False, "error": "Missing target_channel in config"})
     
-    # Check if we have a bot token, if not or if it's invalid, try to refresh
-    if not dashboard_data.config.get('twitch_bot_access_token'):
-        print("[CHAT] No bot access token, attempting to refresh...")
-        if not dashboard_data.refresh_bot_token():
-            return jsonify({"success": False, "error": "No valid bot access token available"})
+    # Get current bot token and validate it
+    current_token = get_current_bot_token(dashboard_data.config_path)
+    if not current_token:
+        print("[CHAT] No bot access token found, attempting to refresh...")
+        success, msg, new_token = refresh_twitch_bot_token(dashboard_data.config_path)
+        if not success:
+            return jsonify({"success": False, "error": f"No valid bot access token: {msg}"})
+        current_token = new_token
+        dashboard_data.load_config()  # Reload config with new token
+    
+    # Validate the token before using it
+    is_valid, validation_msg = validate_bot_token(current_token, dashboard_data.config_path)
+    if not is_valid:
+        print(f"[CHAT] Token validation failed: {validation_msg}, attempting refresh...")
+        success, msg, new_token = refresh_twitch_bot_token(dashboard_data.config_path)
+        if not success:
+            return jsonify({"success": False, "error": f"Token refresh failed: {msg}"})
+        current_token = new_token
+        dashboard_data.load_config()  # Reload config with new token
     
     print(f"[CHAT] Attempting to send to channel: {dashboard_data.config.get('target_channel')}")
     
@@ -391,13 +390,31 @@ def send_chat():
         print(f"[CHAT] Connecting to {server}:{port}")
         sock.connect((server, port))
         
-        # IRC authentication flow with proper bot token
-        sock.send(f"PASS oauth:{dashboard_data.config['twitch_bot_access_token']}\r\n".encode('utf-8'))
+        # IRC authentication flow with validated bot token
+        sock.send(f"PASS oauth:{current_token}\r\n".encode('utf-8'))
         sock.send(f"NICK {dashboard_data.config.get('twitch_bot_username', 'Zeddy_bot')}\r\n".encode('utf-8'))
         print("[CHAT] Sent authentication")
         
-        # Wait for server response before joining
+        # Wait for server response and check for authentication errors
         time.sleep(1)
+        
+        # Check for authentication response (optional - can help debug)
+        try:
+            sock.settimeout(2)  # Short timeout for auth check
+            response = sock.recv(1024).decode('utf-8', errors='ignore')
+            if "Login authentication failed" in response:
+                sock.close()
+                print("[CHAT] Authentication failed, attempting token refresh...")
+                success, msg, new_token = refresh_twitch_bot_token(dashboard_data.config_path)
+                if success:
+                    dashboard_data.load_config()
+                    return jsonify({"success": False, "error": "Token was expired and refreshed, please try again"})
+                else:
+                    return jsonify({"success": False, "error": f"Authentication failed and refresh failed: {msg}"})
+        except socket.timeout:
+            pass  # No response yet, continue
+        
+        sock.settimeout(10)  # Reset timeout
         
         # Request capabilities for better IRC support
         sock.send("CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands\r\n".encode('utf-8'))
@@ -420,6 +437,7 @@ def send_chat():
         sock.close()
         print("[CHAT] Connection closed successfully")
         return jsonify({"success": True, "message": f"Sent to Twitch: {message}"})
+        
     except socket.timeout:
         print("[CHAT] Connection timeout")
         return jsonify({"success": False, "error": "Connection timeout - check your network connection"})
@@ -428,11 +446,6 @@ def send_chat():
         return jsonify({"success": False, "error": "Connection refused - check if Twitch IRC server is accessible"})
     except Exception as e:
         print(f"[CHAT] Error: {str(e)}")
-        # If we get an authentication error, try refreshing the token once
-        if "authentication" in str(e).lower():
-            print("[CHAT] Authentication error, trying to refresh token...")
-            if dashboard_data.refresh_bot_token():
-                return jsonify({"success": False, "error": "Token refreshed, please try again"})
         return jsonify({"success": False, "error": f"Failed to send: {str(e)}"})
 
 @app.route('/api/chat')

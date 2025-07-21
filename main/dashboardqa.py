@@ -29,7 +29,7 @@ app = Flask(__name__, template_folder='../templates')
 CORS(app)  # Enable CORS for all routes
 
 class DashboardData:
-    def __init__(self, config_path="../config.json"):
+    def __init__(self, config_path="./config.json"):
         self.config_path = config_path
         self.load_config()
         self.stream_history = []

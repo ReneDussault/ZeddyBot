@@ -491,13 +491,46 @@ class ZeddyBot(commands.Bot):
                 "message": "ZeddyBot is running"
             })
 
+        @app.route('/api/discord_stats')
+        def api_discord_stats():
+            """Return Discord server member statistics"""
+            try:
+                guilds = self.guilds
+                if not guilds:
+                    return jsonify({"success": False, "error": "Bot not in any Discord servers"})
+                
+                guild = guilds[0]  # Use the first guild
+                
+                # Count total members
+                total_members = guild.member_count
+                
+                # Count online members (excluding bots)
+                online_members = sum(1 for member in guild.members 
+                                   if member.status != discord.Status.offline and not member.bot)
+                
+                # Count total humans (excluding bots)
+                total_humans = sum(1 for member in guild.members if not member.bot)
+                
+                return jsonify({
+                    "success": True,
+                    "stats": {
+                        "total_members": total_members,
+                        "total_humans": total_humans,
+                        "online_members": online_members,
+                        "bot_connected": True,
+                        "guild_name": guild.name
+                    }
+                })
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)})
+
         # Run Flask in a separate thread
         def run_flask():
             app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
         
         flask_thread = threading.Thread(target=run_flask, daemon=True)
         flask_thread.start()
-        print(f"[{now()}] HTTP server started on http://0.0.0.0:5001 for Stream Deck integration")
+        print(f"[{now()}] HTTP server started on http://0.0.0.0:5001 (Stream Deck integration + Discord stats API)")
 
 
     def setup(self):
@@ -1008,71 +1041,12 @@ class ZeddyBot(commands.Bot):
         await channel.send(embed=embed)
 
 
-# Flask API server for Discord stats
-app = Flask(__name__)
-
-# Disable Flask request logging for successful requests
-import logging
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
-
-@app.route('/api/discord_stats')
-def discord_stats():
-    """Return Discord server member statistics using cached real-time data"""
-    try:
-        # Use cached stats if available (updated in real-time)
-        if hasattr(bot, '_discord_stats'):
-            return jsonify({
-                "success": True,
-                "stats": bot._discord_stats
-            })
-        
-        # Fallback to direct calculation if cache not available
-        guilds = bot.guilds
-        if not guilds:
-            return jsonify({"success": False, "error": "Bot not in any Discord servers"})
-        
-        guild = guilds[0]  # Use the first guild
-        
-        # Count total members
-        total_members = guild.member_count
-        
-        # Count online members (excluding bots)
-        online_members = sum(1 for member in guild.members 
-                           if member.status != discord.Status.offline and not member.bot)
-        
-        # Count total humans (excluding bots)
-        total_humans = sum(1 for member in guild.members if not member.bot)
-        
-        return jsonify({
-            "success": True,
-            "stats": {
-                "total_members": total_members,
-                "total_humans": total_humans,
-                "online_members": online_members,
-                "bot_connected": True,
-                "guild_name": guild.name,
-                "last_updated": datetime.now().isoformat()
-            }
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-def run_flask():
-    """Run Flask server in a separate thread"""
-    app.run(debug=False, host='127.0.0.1', port=5001, use_reloader=False)
-
-
 def main():
     config = Config()
     global bot
     bot = ZeddyBot(config)
     
-    # Start Flask API server in background
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-    print(f"[{now()}] Discord stats API started on http://127.0.0.1:5001")
-    
+    # Flask server is already started in ZeddyBot.__init__() via setup_http_server()
     bot.run(config.discord_token)
 
 

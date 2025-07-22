@@ -69,23 +69,51 @@ class DashboardData:
         return success
 
     def connect_obs(self):
-        """Connect to OBS WebSocket v5 using ReqClient"""
+        """Connect to OBS WebSocket v5 using ReqClient - gracefully handle OBS being offline"""
         if ReqClient is None:
-            print("obsws-python not installed.")
+            print("[OBS] obsws-python not installed - OBS features disabled")
+            self.obs_client = None
             return
+        
+        obs_config = self.config.get('obs', {})
+        host = obs_config.get('host', 'localhost')
+        port = obs_config.get('port', 4455)
+        password = obs_config.get('password', '')
+        
+        print(f"[OBS] Attempting to connect to OBS WebSocket at {host}:{port}...")
+        
+        # Temporarily suppress stderr to hide the obsws-python traceback
+        import sys
+        import io
+        
+        old_stderr = sys.stderr
         try:
-            obs_config = self.config.get('obs', {})
-            host = obs_config.get('host', 'localhost')
-            port = obs_config.get('port', 4455)
-            password = obs_config.get('password', '')
-            self.obs_client = ReqClient(host=host, port=port, password=password, timeout=10)
+            # Redirect stderr to suppress obsws-python error output
+            sys.stderr = io.StringIO()
+            
+            # Attempt connection
+            self.obs_client = ReqClient(host=host, port=port, password=password, timeout=5)
             # Test the connection immediately
             self.obs_client.get_version()
-            print(f"Connected to OBS (v5) using ReqClient at {host}:{port}")
-        except Exception as e:
-            print(f"Failed to connect to OBS WebSocket at {obs_config.get('host', 'localhost')}:{obs_config.get('port', 4455)}: {e}")
-            print("Make sure OBS is running and WebSocket server is enabled in Tools > obs-websocket Settings")
+            
+            # Restore stderr and print success
+            sys.stderr = old_stderr
+            print(f"[OBS] ✅ Connected to OBS successfully at {host}:{port}")
+            return
+            
+        except Exception:
+            # Restore stderr first
+            sys.stderr = old_stderr
+            # Any exception from ReqClient creation or version check
             self.obs_client = None
+            print(f"[OBS] ⚠️  OBS not running or unreachable at {host}:{port}")
+            print(f"[OBS] Dashboard will continue without OBS integration")
+
+    def retry_obs_connection(self):
+        """Retry connecting to OBS - useful when OBS starts after dashboard"""
+        print("[OBS] Attempting to reconnect to OBS...")
+        self.connect_obs()
+        return self.obs_client is not None
 
     def start_chat_reader(self):
         def chat_reader():
@@ -225,7 +253,10 @@ class DashboardData:
     def display_question_on_obs(self, username, message):
         """Display Q&A using browser source (primary method)"""
         if not self.obs_client:
-            return False, "OBS not connected"
+            # Try to reconnect once
+            if not self.retry_obs_connection():
+                return False, "OBS not connected - start OBS and try again"
+        
         try:
             # Store the question data for browser source to fetch via API
             self.current_question = {
@@ -252,7 +283,10 @@ class DashboardData:
     def hide_question_on_obs(self):
         """Hide Q&A browser source"""
         if not self.obs_client:
-            return False, "OBS not connected"
+            # Try to reconnect once
+            if not self.retry_obs_connection():
+                return False, "OBS not connected - start OBS and try again"
+        
         try:
             # Clear the question data
             self.current_question = {}
@@ -520,6 +554,24 @@ def ping():
         "message": "Dashboard server is reachable",
         "server_time": datetime.now().isoformat()
     })
+
+@app.route('/api/obs_reconnect', methods=['POST'])
+def obs_reconnect():
+    """Retry OBS connection"""
+    try:
+        success = dashboard_data.retry_obs_connection()
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "Successfully connected to OBS"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Failed to connect to OBS - make sure OBS is running with WebSocket enabled"
+            })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 # Q&A API endpoints
 @app.route('/api/display_question', methods=['POST'])

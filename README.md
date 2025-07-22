@@ -41,7 +41,7 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
 ![Live Role](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/live.bmp)
 
 ### Dashboard
-![Dashboard](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/dashandchat.png)
+![dashboard](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/dashandchat.png)
 
 ### Twitch Integration
 ![Twitch](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/twitch.png)

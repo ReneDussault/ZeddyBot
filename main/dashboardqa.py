@@ -45,8 +45,14 @@ class DashboardData:
         self.current_question = {}
         self.qna_theme = "default"  # Store current Q&A theme
         self.obs_client = None
+        self.last_obs_attempt = 0  # Rate limiting for OBS connections
+        self.obs_connection_cooldown = 30  # Wait 30 seconds between connection attempts
         self.connect_obs()
         self.start_chat_reader()
+
+    def _log_timestamp(self):
+        """Get formatted timestamp for logging"""
+        return datetime.now().strftime('%H:%M:%S')
 
     def load_config(self):
         with open(self.config_path) as f:
@@ -63,24 +69,31 @@ class DashboardData:
         if success:
             # Reload config to get the updated token
             self.load_config()
-            print(f"[DASHBOARD] {message}")
+            print(f"[{self._log_timestamp()}] [DASHBOARD] {message}")
         else:
-            print(f"[DASHBOARD] {message}")
+            print(f"[{self._log_timestamp()}] [DASHBOARD] {message}")
         return success
 
     def connect_obs(self):
         """Connect to OBS WebSocket v5 using ReqClient - gracefully handle OBS being offline"""
         if ReqClient is None:
-            print("[OBS] obsws-python not installed - OBS features disabled")
+            print(f"[{self._log_timestamp()}] [OBS] obsws-python not installed - OBS features disabled")
             self.obs_client = None
             return
+        
+        # Rate limiting: don't attempt connection too frequently
+        current_time = time.time()
+        if current_time - self.last_obs_attempt < self.obs_connection_cooldown:
+            return  # Skip connection attempt, too soon
+            
+        self.last_obs_attempt = current_time
         
         obs_config = self.config.get('obs', {})
         host = obs_config.get('host', 'localhost')
         port = obs_config.get('port', 4455)
         password = obs_config.get('password', '')
         
-        print(f"[OBS] Attempting to connect to OBS WebSocket at {host}:{port}...")
+        print(f"[{self._log_timestamp()}] [OBS] Attempting to connect to OBS WebSocket at {host}:{port}...")
         
         # Temporarily suppress stderr to hide the obsws-python traceback
         import sys
@@ -98,7 +111,7 @@ class DashboardData:
             
             # Restore stderr and print success
             sys.stderr = old_stderr
-            print(f"[OBS] ✅ Connected to OBS successfully at {host}:{port}")
+            print(f"[{self._log_timestamp()}] [OBS] ✅ Connected to OBS successfully at {host}:{port}")
             return
             
         except Exception:
@@ -106,12 +119,19 @@ class DashboardData:
             sys.stderr = old_stderr
             # Any exception from ReqClient creation or version check
             self.obs_client = None
-            print(f"[OBS] ⚠️  OBS not running or unreachable at {host}:{port}")
-            print(f"[OBS] Dashboard will continue without OBS integration")
+            print(f"[{self._log_timestamp()}] [OBS] ⚠️  OBS not running or unreachable at {host}:{port}")
+            print(f"[{self._log_timestamp()}] [OBS] Dashboard will continue without OBS integration (retry in {self.obs_connection_cooldown}s)")
 
     def retry_obs_connection(self):
         """Retry connecting to OBS - useful when OBS starts after dashboard"""
-        print("[OBS] Attempting to reconnect to OBS...")
+        # Check if we're in cooldown period
+        current_time = time.time()
+        if current_time - self.last_obs_attempt < self.obs_connection_cooldown:
+            time_remaining = int(self.obs_connection_cooldown - (current_time - self.last_obs_attempt))
+            print(f"[{self._log_timestamp()}] [OBS] Connection attempt too recent, retry in {time_remaining}s")
+            return False
+            
+        print(f"[{self._log_timestamp()}] [OBS] Manual reconnection attempt...")
         self.connect_obs()
         return self.obs_client is not None
 
@@ -126,7 +146,7 @@ class DashboardData:
                             data = self.chat_sock.recv(1024).decode('utf-8', errors='ignore')
                             self.parse_chat_messages(data)
                 except Exception as e:
-                    print(f"Chat reader error: {e}")
+                    print(f"[{self._log_timestamp()}] Chat reader error: {e}")
                     time.sleep(5)
         chat_thread = threading.Thread(target=chat_reader, daemon=True)
         chat_thread.start()
@@ -140,9 +160,9 @@ class DashboardData:
             self.chat_sock.send(f"PASS oauth:{self.config['access_token']}\r\n".encode('utf-8'))
             self.chat_sock.send(f"NICK justinfan12345\r\n".encode('utf-8'))
             self.chat_sock.send(f"JOIN #{self.config.get('target_channel', '')}\r\n".encode('utf-8'))
-            print(f"Connected to chat: #{self.config.get('target_channel', '')}")
+            print(f"[{self._log_timestamp()}] Connected to chat: #{self.config.get('target_channel', '')}")
         except Exception as e:
-            print(f"Failed to connect to chat: {e}")
+            print(f"[{self._log_timestamp()}] Failed to connect to chat: {e}")
             self.chat_sock = None
 
     def parse_chat_messages(self, data):
@@ -160,7 +180,7 @@ class DashboardData:
                             'timestamp': datetime.now().strftime('%H:%M:%S')
                         })
                 except Exception as e:
-                    print(f"Error parsing message: {e}")
+                    print(f"[{self._log_timestamp()}] Error parsing message: {e}")
             elif 'PING' in line:
                 if self.chat_sock:
                     self.chat_sock.send("PONG :tmi.twitch.tv\r\n".encode('utf-8'))
@@ -191,7 +211,7 @@ class DashboardData:
                 streams = stream_response.json()["data"]
                 return streams[0] if streams else None
         except Exception as e:
-            print(f"Error getting stream status: {e}")
+            print(f"[{self._log_timestamp()}] Error getting stream status: {e}")
             return None
 
     def update_data(self):
@@ -253,13 +273,8 @@ class DashboardData:
     def display_question_on_obs(self, username, message):
         """Display Q&A using browser source (primary method)"""
         if not self.obs_client:
-            # Try to reconnect once
-            if not self.retry_obs_connection():
-                return False, "OBS not connected - start OBS and try again"
-            
-            # Double-check that obs_client is now available
-            if not self.obs_client:
-                return False, "Failed to establish OBS connection"
+            # Don't automatically retry - let user manually reconnect
+            return False, "OBS not connected - use reconnect button"
         
         try:
             # Store the question data for browser source to fetch via API
@@ -278,7 +293,7 @@ class DashboardData:
                 )
                 return True, "Question displayed on stream via browser source"
             except Exception as scene_error:
-                print(f"[OBS] Scene item ID 73 not found: {scene_error}")
+                print(f"[{self._log_timestamp()}] [OBS] Scene item ID 73 not found: {scene_error}")
                 return False, f"Failed to show Q&A scene: {scene_error}"
 
         except Exception as e:
@@ -287,13 +302,8 @@ class DashboardData:
     def hide_question_on_obs(self):  # Note the proper indentation
         """Hide Q&A browser source"""
         if not self.obs_client:
-            # Try to reconnect once
-            if not self.retry_obs_connection():
-                return False, "OBS not connected - start OBS and try again"
-            
-            # Double-check that obs_client is now available
-            if not self.obs_client:
-                return False, "Failed to establish OBS connection"
+            # Don't automatically retry - let user manually reconnect
+            return False, "OBS not connected - use reconnect button"
         
         try:
             # Clear the question data
@@ -308,7 +318,7 @@ class DashboardData:
                 )
                 return True, "Question hidden from stream"
             except Exception as scene_error:
-                print(f"[OBS] Scene item ID 73 not found: {scene_error}")
+                print(f"[{self._log_timestamp()}] [OBS] Scene item ID 73 not found: {scene_error}")
                 return False, f"Failed to hide Q&A scene: {scene_error}"
 
         except Exception as e:
@@ -581,6 +591,47 @@ def obs_reconnect():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
+@app.route('/api/obs_status', methods=['GET'])
+def obs_status():
+    """Get OBS connection status without attempting reconnection"""
+    try:
+        if dashboard_data.obs_client:
+            # Quick test to see if connection is still valid
+            try:
+                dashboard_data.obs_client.get_version()
+                return jsonify({
+                    "success": True,
+                    "connected": True,
+                    "message": "OBS connected and responding"
+                })
+            except Exception:
+                # Connection lost
+                dashboard_data.obs_client = None
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "message": "OBS connection lost"
+                })
+        else:
+            # Check cooldown status
+            current_time = time.time()
+            time_since_attempt = current_time - dashboard_data.last_obs_attempt
+            if time_since_attempt < dashboard_data.obs_connection_cooldown:
+                cooldown_remaining = int(dashboard_data.obs_connection_cooldown - time_since_attempt)
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "message": f"OBS not connected (retry available in {cooldown_remaining}s)"
+                })
+            else:
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "message": "OBS not connected (retry available)"
+                })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
 # Q&A API endpoints
 @app.route('/api/display_question', methods=['POST'])
 def display_question():
@@ -681,11 +732,8 @@ def get_obs_scenes():
     """Get list of available OBS scenes"""
     try:
         if not dashboard_data.obs_client:
-            # Try to reconnect to OBS
-            dashboard_data.connect_obs()
-            
-        if not dashboard_data.obs_client:
-            return jsonify({"success": False, "error": "OBS not connected"})
+            # Don't try to reconnect here - let the user manually reconnect if needed
+            return jsonify({"success": False, "error": "OBS not connected - use reconnect button"})
         
         # Test the connection first
         try:
@@ -711,9 +759,9 @@ def get_obs_scenes():
                 "current_scene": current_scene
             })
         except Exception as obs_error:
-            # OBS connection failed, try to reconnect
-            dashboard_data.connect_obs()
-            return jsonify({"success": False, "error": f"OBS connection failed: {str(obs_error)}"})
+            # OBS connection failed - don't automatically reconnect
+            dashboard_data.obs_client = None  # Mark as disconnected
+            return jsonify({"success": False, "error": f"OBS connection lost: {str(obs_error)}"})
             
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})

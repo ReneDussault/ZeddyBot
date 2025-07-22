@@ -256,6 +256,10 @@ class DashboardData:
             # Try to reconnect once
             if not self.retry_obs_connection():
                 return False, "OBS not connected - start OBS and try again"
+            
+            # Double-check that obs_client is now available
+            if not self.obs_client:
+                return False, "Failed to establish OBS connection"
         
         try:
             # Store the question data for browser source to fetch via API
@@ -268,9 +272,9 @@ class DashboardData:
             # Enable the Q&A nested scene (ID 73) which contains the browser source
             try:
                 self.obs_client.set_scene_item_enabled(
-                    scene_name="Scene - In Game",  # Your OBS scene name
-                    item_id=73,                     # Your Q&A nested scene item ID
-                    enabled=True                   # Enable the nested scene
+                    scene_name="Scene - In Game",
+                    item_id=73,
+                    enabled=True
                 )
                 return True, "Question displayed on stream via browser source"
             except Exception as scene_error:
@@ -280,12 +284,16 @@ class DashboardData:
         except Exception as e:
             return False, f"OBS error: {str(e)}"
 
-    def hide_question_on_obs(self):
+    def hide_question_on_obs(self):  # Note the proper indentation
         """Hide Q&A browser source"""
         if not self.obs_client:
             # Try to reconnect once
             if not self.retry_obs_connection():
                 return False, "OBS not connected - start OBS and try again"
+            
+            # Double-check that obs_client is now available
+            if not self.obs_client:
+                return False, "Failed to establish OBS connection"
         
         try:
             # Clear the question data
@@ -294,11 +302,11 @@ class DashboardData:
             # Hide the Q&A nested scene (ID 73)
             try:
                 self.obs_client.set_scene_item_enabled(
-                    scene_name="Scene - In Game",  # Your OBS scene name
-                    item_id=73,                     # Your Q&A nested scene item ID
-                    enabled=False                  # Hide the nested scene
+                    scene_name="Scene - In Game",
+                    item_id=73,
+                    enabled=False
                 )
-                return True, "Question hidden"
+                return True, "Question hidden from stream"
             except Exception as scene_error:
                 print(f"[OBS] Scene item ID 73 not found: {scene_error}")
                 return False, f"Failed to hide Q&A scene: {scene_error}"
@@ -615,129 +623,7 @@ def set_qna_theme():
     ok, msg = dashboard_data.set_qna_theme(theme)
     return jsonify({"success": ok, "message": msg, "theme": theme})
 
-# Bot moderation endpoints for Stream Deck integration
-@app.route('/api/check_bots', methods=['POST'])
-def api_check_bots():
-    try:
-        # Try TwitchInsights first
-        try:
-            response = requests.get("https://api.twitchinsights.net/v1/bots/online", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                bot_count = len(data["bots"])
-                return jsonify({
-                    "success": True,
-                    "stats": {
-                        "total_known_bots": bot_count,
-                        "last_update": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        "source": "TwitchInsights"
-                    },
-                    "message": f"Found {bot_count} known bots online"
-                })
-        except Exception as e:
-            print(f"TwitchInsights API failed: {e}")
-        
-        # Try CommanderRoot backup
-        try:
-            response = requests.get("https://api.commanderroot.com/v1/twitch/bots", timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                bots = data.get("bots", [])
-                bot_count = len(bots)
-                return jsonify({
-                    "success": True,
-                    "stats": {
-                        "total_known_bots": bot_count,
-                        "last_update": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        "source": "CommanderRoot"
-                    },
-                    "message": f"Found {bot_count} known bots online (backup API)"
-                })
-        except Exception as e:
-            print(f"CommanderRoot API failed: {e}")
-        
-        # Fallback to hardcoded list
-        fallback_bots = [
-            "streamelements", "nightbot", "streamlabs", "fossabot", "moobot",
-            "botisimo", "wizebot", "coebot", "ankhbot", "deepbot", "phantombot",
-            "commanderroot", "electricallongboard", "hoss0001", "lurxx"
-        ]
-        
-        return jsonify({
-            "success": True,
-            "stats": {
-                "total_known_bots": len(fallback_bots),
-                "last_update": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "source": "Fallback"
-            },
-            "message": f"Using fallback list: {len(fallback_bots)} known bots"
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/api/moderate_bots', methods=['POST'])
-def api_moderate_bots():
-    try:
-        data = request.json if request.json else {}
-        action = data.get('action', 'timeout')
-        duration = data.get('duration', 300)
-        
-        if action not in ["timeout", "ban"]:
-            return jsonify({"success": False, "error": "Action must be 'timeout' or 'ban'"})
-        
-        # Fetch bot list
-        response = requests.get("https://api.twitchinsights.net/v1/bots/online", timeout=10)
-        response.raise_for_status()
-        bot_data = response.json()
-        
-        # Default whitelist of legitimate bots
-        whitelist = [
-            "nightbot", "streamelements", "streamlabs", "fossabot", 
-            "moobot", "botisimo", "wizebot", "coebot", "ankhbot",
-            "deepbot", "phantombot", "streamholics", "stay_hydrated_bot"
-        ]
-        
-        moderated_bots = []
-        failed_bots = []
-        
-        # Filter out whitelisted bots and limit to first 20 to avoid timeouts
-        for bot_info in bot_data["bots"][:20]:
-            bot_name = bot_info[0]
-            if bot_name.lower() not in whitelist:
-                try:
-                    # Send moderation command to Twitch
-                    sock = socket.socket()
-                    sock.connect(("irc.chat.twitch.tv", 6667))
-                    
-                    sock.send(f"PASS oauth:{dashboard_data.config['twitch_bot_access_token']}\r\n".encode('utf-8'))
-                    sock.send(f"NICK {dashboard_data.config.get('twitch_bot_username', 'Zeddy_bot')}\r\n".encode('utf-8'))
-                    sock.send(f"JOIN #{dashboard_data.config.get('target_channel', '')}\r\n".encode('utf-8'))
-                    
-                    if action == "ban":
-                        sock.send(f"PRIVMSG #{dashboard_data.config.get('target_channel', '')} :/ban {bot_name} Auto-banned bot\r\n".encode('utf-8'))
-                    else:
-                        sock.send(f"PRIVMSG #{dashboard_data.config.get('target_channel', '')} :/timeout {bot_name} {duration} Auto-moderated bot\r\n".encode('utf-8'))
-                    
-                    time.sleep(2)  # Rate limiting
-                    sock.close()
-                    
-                    moderated_bots.append(bot_name)
-                    
-                except Exception as e:
-                    failed_bots.append(bot_name)
-                    print(f"Failed to moderate {bot_name}: {e}")
-        
-        return jsonify({
-            "success": True,
-            "moderated_count": len(moderated_bots),
-            "failed_count": len(failed_bots),
-            "moderated_bots": moderated_bots,
-            "action": action
-        })
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+# Bot moderation functionality removed due to TwitchInsights being discontinued
 
 @app.route('/api/bot_status', methods=['GET'])
 def api_bot_status():

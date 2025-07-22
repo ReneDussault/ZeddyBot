@@ -21,8 +21,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import our shared token utility
 from tools.token_utils import refresh_twitch_bot_token
 
-# Import our bot moderation module
-from tools.bot_moderation import BotModerationManager
+# Bot moderation functionality removed due to TwitchInsights being discontinued
 
 logging.getLogger("discord").setLevel(logging.WARNING)
 
@@ -190,11 +189,7 @@ class TwitchChatBot:
         self.port = 6667
         self.socket = None
         self.connected = False
-        self.bot_moderation = None  # Will be set by ZeddyBot
-    
-    def set_bot_moderation(self, bot_moderation):
-        """Set the bot moderation manager"""
-        self.bot_moderation = bot_moderation
+        # Bot moderation functionality removed
 
 
     def connect(self):
@@ -302,66 +297,13 @@ class TwitchChatBot:
             
             # Check for bot moderation commands (only for streamers/mods)
             if username.lower() == self.config.target_channel.lower():  # Only streamer can use these
-                if message_text.startswith("!checkbots"):
-                    self._handle_twitch_check_bots()
-                elif message_text.startswith("!timeoutbots"):
-                    self._handle_twitch_moderate_bots("timeout")
-                elif message_text.startswith("!banbots"):
-                    self._handle_twitch_moderate_bots("ban")
+                # Bot moderation commands removed due to TwitchInsights being discontinued
+                pass
                 
         except Exception as e:
             print(f"[{now()}] Error handling chat message: {e}")
 
-    def _handle_twitch_check_bots(self):
-        """Handle !checkbots command from Twitch chat"""
-        if not self.bot_moderation:
-            return
-        
-        try:
-            if self.bot_moderation.update_bot_list():
-                stats = self.bot_moderation.get_bot_stats()
-                self.send_message(f"🤖 Bot Check: Found {stats['total_known_bots']} known bots online")
-            else:
-                self.send_message("❌ Failed to fetch bot list from API")
-        except Exception as e:
-            self.send_message(f"❌ Error checking bots: {e}")
-
-    def _handle_twitch_moderate_bots(self, action):
-        """Handle bot moderation commands from Twitch chat"""
-        if not self.bot_moderation:
-            return
-        
-        try:
-            # This is a sync function, but we need to run async code
-            # We'll use a simple approach - just update and moderate known bots
-            if self.bot_moderation.update_bot_list():
-                stats = self.bot_moderation.get_bot_stats()
-                self.send_message(f"🤖 Starting bot {action}... Found {stats['total_known_bots']} bots to check")
-                
-                # Get bots to moderate (sync version)
-                try:
-                    known_bots = getattr(self.bot_moderation, 'known_bots', set())
-                    whitelist = getattr(self.bot_moderation, 'whitelist', [])
-                    bots_to_moderate = [bot for bot in known_bots if bot not in whitelist]
-                except:
-                    bots_to_moderate = []
-                
-                moderated_count = 0
-                for bot_name in bots_to_moderate[:10]:  # Limit to first 10 to avoid spam
-                    if action == "ban":
-                        success = self.send_message(f"/ban {bot_name} Auto-banned bot")
-                    else:
-                        success = self.send_message(f"/timeout {bot_name} 300 Auto-moderated bot")
-                    
-                    if success:
-                        moderated_count += 1
-                
-                self.send_message(f"✅ {action.title()}ed {moderated_count} bots")
-            else:
-                self.send_message("❌ Failed to fetch bot list")
-                
-        except Exception as e:
-            self.send_message(f"❌ Error during {action}: {e}")
+    # Bot moderation methods removed due to TwitchInsights being discontinued
 
 
 class StreamNotificationManager:
@@ -416,15 +358,7 @@ class ZeddyBot(commands.Bot):
         # timestamps for tracking role upgrades
         self.user_join_timestamps = {}
 
-        # Initialize bot moderation manager
-        self.bot_moderation = BotModerationManager(
-            twitch_chat_bot=self.twitch_chat_bot,
-            discord_bot=self,
-            channel_id=self.CHANNEL_ID
-        )
-
-        # Connect bot moderation to Twitch chat
-        self.twitch_chat_bot.set_bot_moderation(self.bot_moderation)
+        # Bot moderation functionality removed due to TwitchInsights being discontinued
 
         # Setup HTTP server for Stream Deck integration
         self.setup_http_server()
@@ -446,41 +380,7 @@ class ZeddyBot(commands.Bot):
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
         
-        @app.route('/api/check_bots', methods=['POST'])
-        def api_check_bots():
-            try:
-                if self.bot_moderation.update_bot_list():
-                    stats = self.bot_moderation.get_bot_stats()
-                    return jsonify({
-                        "success": True,
-                        "stats": stats,
-                        "message": f"Found {stats['total_known_bots']} known bots online"
-                    })
-                else:
-                    return jsonify({"success": False, "error": "Failed to fetch bot list"})
-            except Exception as e:
-                return jsonify({"success": False, "error": str(e)})
-
-        @app.route('/api/moderate_bots', methods=['POST'])
-        def api_moderate_bots():
-            try:
-                data = request.json if request.json else {}
-                action = data.get('action', 'timeout')
-                duration = data.get('duration', 300)
-                
-                if action not in ["timeout", "ban"]:
-                    return jsonify({"success": False, "error": "Action must be 'timeout' or 'ban'"})
-                
-                # Run the async function in the bot's event loop
-                future = asyncio.run_coroutine_threadsafe(
-                    self.bot_moderation.check_and_moderate_bots(action, duration),
-                    self.loop
-                )
-                result = future.result(timeout=30)  # 30 second timeout
-                
-                return jsonify(result)
-            except Exception as e:
-                return jsonify({"success": False, "error": str(e)})
+        # Bot moderation API endpoints removed due to TwitchInsights being discontinued
 
         @app.route('/api/status', methods=['GET'])
         def api_status():
@@ -564,152 +464,7 @@ class ZeddyBot(commands.Bot):
                 await ctx.send("Failed to refresh the bot's Twitch token.")
 
         # Bot moderation commands
-        @self.command()
-        async def detect_bots_by_pattern(ctx):
-            """Detect potential bots using username patterns (when APIs fail)"""
-            try:
-                # Get list of current chatters (this would need Twitch API integration)
-                await ctx.send("🔍 Scanning usernames for bot patterns...")
-                
-                # For now, we'll just show how many patterns we're using
-                pattern_count = len(self.bot_moderation.bot_patterns)
-                embed = discord.Embed(
-                    title="🤖 Pattern-Based Bot Detection",
-                    color=0xff6600,
-                    timestamp=datetime.now()
-                )
-                embed.add_field(name="Detection Patterns", value=pattern_count, inline=True)
-                embed.add_field(name="Whitelist Size", value=len(self.bot_moderation.whitelist), inline=True)
-                embed.add_field(name="Status", value="Ready for manual detection", inline=True)
-                embed.add_field(
-                    name="Usage", 
-                    value="Use `!suspect_bot <username>` to check individual users", 
-                    inline=False
-                )
-                await ctx.send(embed=embed)
-                
-            except Exception as e:
-                await ctx.send(f"❌ Error in pattern detection: {e}")
-
-        @self.command()
-        async def suspect_bot(ctx, username: str):
-            """Check if a specific username looks like a bot"""
-            try:
-                is_bot = self.bot_moderation.is_likely_bot(username)
-                is_whitelisted = username.lower() in [w.lower() for w in self.bot_moderation.whitelist]
-                
-                embed = discord.Embed(
-                    title=f"🔍 Bot Analysis: {username}",
-                    color=0xff6600 if is_bot else 0x00ff00,
-                    timestamp=datetime.now()
-                )
-                
-                embed.add_field(name="Suspicious Pattern", value="✅ Yes" if is_bot else "❌ No", inline=True)
-                embed.add_field(name="Whitelisted", value="✅ Yes" if is_whitelisted else "❌ No", inline=True)
-                embed.add_field(
-                    name="Recommendation", 
-                    value="🚫 Likely bot" if is_bot and not is_whitelisted else "✅ Probably human",
-                    inline=True
-                )
-                
-                await ctx.send(embed=embed)
-                
-            except Exception as e:
-                await ctx.send(f"❌ Error checking username: {e}")
-
-        @self.command()
-        async def check_bots(ctx):
-            """Check for known bots online"""
-            try:
-                if self.bot_moderation.update_bot_list():
-                    stats = self.bot_moderation.get_bot_stats()
-                    embed = discord.Embed(
-                        title="🤖 Bot Detection Stats",
-                        color=0x9146ff,
-                        timestamp=datetime.now()
-                    )
-                    embed.add_field(name="Known Bots Online", value=stats["total_known_bots"], inline=True)
-                    embed.add_field(name="Whitelisted Bots", value=stats["whitelisted_bots"], inline=True)
-                    embed.add_field(name="Last Updated", value=stats["last_update"], inline=True)
-                    await ctx.send(embed=embed)
-                else:
-                    await ctx.send("❌ Failed to fetch bot list from API")
-            except Exception as e:
-                await ctx.send(f"❌ Error checking bots: {e}")
-
-        @self.command()
-        async def moderate_bots(ctx, action: str = "timeout", duration: int = 300):
-            """Moderate known bots (timeout/ban)"""
-            if action not in ["timeout", "ban"]:
-                await ctx.send("❌ Action must be 'timeout' or 'ban'")
-                return
-            
-            await ctx.send(f"🤖 Starting bot moderation ({action})...")
-            
-            try:
-                result = await self.bot_moderation.check_and_moderate_bots(action, duration)
-                
-                if result["success"]:
-                    embed = discord.Embed(
-                        title="🤖 Bot Moderation Complete",
-                        color=0x00ff00,
-                        timestamp=datetime.now()
-                    )
-                    embed.add_field(name="Moderated", value=result["moderated_count"], inline=True)
-                    embed.add_field(name="Failed", value=result["failed_count"], inline=True)
-                    embed.add_field(name="Action", value=action.title(), inline=True)
-                    
-                    if result["moderated_bots"]:
-                        # Limit to first 10 bots to avoid message length issues
-                        bot_list = ", ".join(result["moderated_bots"][:10])
-                        if len(result["moderated_bots"]) > 10:
-                            bot_list += f" (and {len(result['moderated_bots']) - 10} more)"
-                        embed.add_field(name="Bots Moderated", value=bot_list, inline=False)
-                    
-                    await ctx.send(embed=embed)
-                else:
-                    await ctx.send(f"❌ {result.get('error', 'Unknown error')}")
-                    
-            except Exception as e:
-                await ctx.send(f"❌ Error during moderation: {e}")
-
-        @self.command()
-        async def whitelist_bot(ctx, bot_name: str):
-            """Add a bot to the whitelist"""
-            self.bot_moderation.add_to_whitelist(bot_name)
-            await ctx.send(f"✅ Added `{bot_name}` to the bot whitelist")
-
-        @self.command()
-        async def unwhitelist_bot(ctx, bot_name: str):
-            """Remove a bot from the whitelist"""
-            self.bot_moderation.remove_from_whitelist(bot_name)
-            await ctx.send(f"✅ Removed `{bot_name}` from the bot whitelist")
-
-        @self.command()
-        async def show_whitelist(ctx):
-            """Show current bot whitelist"""
-            whitelist = self.bot_moderation.get_whitelist()
-            if whitelist:
-                # Split into chunks if too long
-                bot_list = ", ".join(whitelist)
-                if len(bot_list) > 1900:  # Discord embed limit
-                    chunks = [whitelist[i:i+20] for i in range(0, len(whitelist), 20)]
-                    for i, chunk in enumerate(chunks):
-                        embed = discord.Embed(
-                            title=f"🤖 Bot Whitelist (Part {i+1}/{len(chunks)})",
-                            description=", ".join(chunk),
-                            color=0x00ff00
-                        )
-                        await ctx.send(embed=embed)
-                else:
-                    embed = discord.Embed(
-                        title="🤖 Bot Whitelist",
-                        description=bot_list,
-                        color=0x00ff00
-                    )
-                    await ctx.send(embed=embed)
-            else:
-                await ctx.send("📝 Bot whitelist is empty")
+        # Bot moderation Discord commands removed due to TwitchInsights being discontinued
 
         @self.command()
         async def test_stream_check(ctx):

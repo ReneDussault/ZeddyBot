@@ -231,80 +231,7 @@
             transform: scale(1.1);
         }
 
-        /* Bot Moderation Styles */
-        .mod-button {
-            background: linear-gradient(135deg, #9146ff, #772ce8);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.2s;
-            margin: 0.25rem;
-            min-width: 120px;
-        }
-
-        .mod-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(145, 70, 255, 0.3);
-        }
-
-        .mod-button.danger {
-            background: linear-gradient(135deg, #e53e3e, #c53030);
-        }
-
-        .mod-button.danger:hover {
-            box-shadow: 0 4px 12px rgba(229, 62, 62, 0.3);
-        }
-
-        .mod-button.warning {
-            background: linear-gradient(135deg, #ed8936, #dd6b20);
-        }
-
-        .mod-button.warning:hover {
-            box-shadow: 0 4px 12px rgba(237, 137, 54, 0.3);
-        }
-
-        .mod-button:disabled {
-            background: #a0aec0;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .bot-stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin: 1rem 0;
-        }
-
-        .bot-stat-item {
-            text-align: center;
-            padding: 0.75rem;
-            background: rgba(145, 70, 255, 0.1);
-            border-radius: 8px;
-            border: 1px solid rgba(145, 70, 255, 0.2);
-        }
-
-        .bot-stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #9146ff;
-        }
-
-        .bot-stat-label {
-            font-size: 0.875rem;
-            color: #718096;
-            margin-top: 0.25rem;
-        }
-
-        .status-message {
-            padding: 0.75rem;
-            border-radius: 8px;
-            margin: 0.5rem 0;
-            font-size: 0.875rem;
-        }
+        /* Bot Moderation styles removed due to TwitchInsights being discontinued */
 
         /* Status indicator styles */
         .status-indicator {
@@ -603,34 +530,7 @@
                 <div id="quick-message-status" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
             </div>
 
-            <div class="card">
-                <h2>🤖 Bot Moderation</h2>
-
-                <div class="bot-stats">
-                    <div class="bot-stat-item">
-                        <div class="bot-stat-number" id="known-bots">-</div>
-                        <div class="bot-stat-label">Known Bots</div>
-                    </div>
-                    <div class="bot-stat-item">
-                        <div class="bot-stat-number" id="last-check">-</div>
-                        <div class="bot-stat-label">Last Check</div>
-                    </div>
-                </div>
-
-                <div id="bot-status-message"></div>
-
-                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
-                    <button class="mod-button" onclick="checkBots()">
-                        🔍 Check Bots
-                    </button>
-                    <button class="mod-button warning" onclick="timeoutBots()">
-                        ⏰ Timeout Bots
-                    </button>
-                    <button class="mod-button danger" onclick="banBots()">
-                        🚫 Ban Bots
-                    </button>
-                </div>
-            </div>
+            <!-- Bot Moderation section removed due to TwitchInsights being discontinued -->
 
             <div class="card">
                 <h2>💬 Discord Control</h2>
@@ -922,112 +822,7 @@
                 }
             });
 
-            // Bot Moderation Functions
-            function showBotStatus(message, type = 'info') {
-                const statusDiv = document.getElementById('bot-status-message');
-                statusDiv.className = `status-message status-${type}`;
-                statusDiv.textContent = message;
-
-                // Auto-clear after 5 seconds unless it's an error
-                if (type !== 'error') {
-                    setTimeout(() => {
-                        statusDiv.textContent = '';
-                        statusDiv.className = '';
-                    }, 5000);
-                }
-            }
-
-            function setButtonsDisabled(disabled) {
-                const buttons = document.querySelectorAll('.mod-button');
-                buttons.forEach(btn => btn.disabled = disabled);
-            }
-
-            async function checkBots() {
-                showBotStatus('Checking for bots...', 'warning');
-                setButtonsDisabled(true);
-
-                try {
-                    const response = await fetch('/api/check_bots', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-
-                    const result = await response.json();
-
-                    if (result.success) {
-                        document.getElementById('known-bots').textContent = result.stats.total_known_bots;
-                        document.getElementById('last-check').textContent = new Date().toLocaleTimeString();
-                        showBotStatus(`Found ${result.stats.total_known_bots} known bots online`, 'success');
-                    } else {
-                        showBotStatus('Failed to fetch bot list: ' + (result.error || 'Unknown error'), 'error');
-                    }
-                } catch (error) {
-                    showBotStatus('Connection error: ' + error.message, 'error');
-                } finally {
-                    setButtonsDisabled(false);
-                }
-            }
-
-            async function timeoutBots() {
-                if (!confirm('Are you sure you want to timeout detected bots? This will timeout them for 5 minutes.')) {
-                    return;
-                }
-
-                showBotStatus('Timing out bots...', 'warning');
-                setButtonsDisabled(true);
-
-                try {
-                    const response = await fetch('/api/moderate_bots', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'timeout', duration: 300 })
-                    });
-
-                    const result = await response.json();
-
-                    if (result.success) {
-                        showBotStatus(`Successfully timed out ${result.moderated_count} bots`, 'success');
-                    } else {
-                        showBotStatus('Moderation failed: ' + (result.error || 'Unknown error'), 'error');
-                    }
-                } catch (error) {
-                    showBotStatus('Connection error: ' + error.message, 'error');
-                } finally {
-                    setButtonsDisabled(false);
-                }
-            }
-
-            async function banBots() {
-                if (!confirm('Are you sure you want to BAN detected bots? This is a permanent action!')) {
-                    return;
-                }
-
-                showBotStatus('Banning bots...', 'warning');
-                setButtonsDisabled(true);
-
-                try {
-                    const response = await fetch('/api/moderate_bots', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'ban' })
-                    });
-
-                    const result = await response.json();
-
-                    if (result.success) {
-                        showBotStatus(`Successfully banned ${result.moderated_count} bots`, 'success');
-                    } else {
-                        showBotStatus('Moderation failed: ' + (result.error || 'Unknown error'), 'error');
-                    }
-                } catch (error) {
-                    showBotStatus('Connection error: ' + error.message, 'error');
-                } finally {
-                    setButtonsDisabled(false);
-                }
-            }
-
-            // Auto-check bots on page load
-            setTimeout(checkBots, 2000);
+            // Bot Moderation functionality removed due to TwitchInsights being discontinued
 
             // ========== NEW DASHBOARD FUNCTIONS ==========
 

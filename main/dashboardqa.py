@@ -605,11 +605,13 @@ def obs_status():
         if dashboard_data.obs_client:
             # Quick test to see if connection is still valid
             try:
-                dashboard_data.obs_client.get_version()
+                version_info = dashboard_data.obs_client.get_version()
+                current_scene = dashboard_data.obs_client.get_current_program_scene()
                 return jsonify({
                     "success": True,
                     "connected": True,
-                    "message": "OBS connected and responding"
+                    "current_scene": current_scene.scene_name if hasattr(current_scene, 'scene_name') else "Unknown",
+                    "message": f"OBS Connected - Current: {current_scene.scene_name if hasattr(current_scene, 'scene_name') else 'Unknown'}"
                 })
             except Exception:
                 # Connection lost
@@ -618,6 +620,30 @@ def obs_status():
                     "success": True,
                     "connected": False,
                     "message": "OBS connection lost"
+                })
+        else:
+            # Check cooldown status
+            current_time = time.time()
+            time_remaining = max(0, dashboard_data.obs_connection_cooldown - (current_time - dashboard_data.last_obs_attempt))
+            if time_remaining > 0:
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "message": f"OBS Not Connected (retry in {int(time_remaining)}s)"
+                })
+            else:
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "message": "OBS Not Connected"
+                })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "connected": False,
+            "error": str(e),
+            "message": "OBS Status Error"
+        })
                 })
         else:
             # Check cooldown status

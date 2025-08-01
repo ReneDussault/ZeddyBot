@@ -556,6 +556,10 @@
                         style="background: #2ecc71; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600;">
                         📡 Ping Dashboard
                     </button>
+                    <button onclick="reconnectOBS()"
+                        style="background: #e67e22; color: white; border: none; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600;">
+                        🎥 Reconnect OBS
+                    </button>
                 </div>
                 <div id="system-status-message" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
             </div>
@@ -880,34 +884,48 @@
             // OBS Scene Control Functions
             async function loadOBSScenes() {
                 try {
-                    const response = await fetch('/api/obs_scenes');
-                    const result = await response.json();
+                    // Use dedicated status endpoint that doesn't trigger auto-reconnection
+                    const statusResponse = await fetch('/api/obs_status');
+                    const statusResult = await statusResponse.json();
 
                     const obsStatus = document.getElementById('obs-status');
                     const sceneButtons = document.getElementById('scene-buttons');
 
-                    if (result.success) {
-                        obsStatus.textContent = `OBS Connected - Current: ${result.current_scene}`;
-                        obsStatus.style.background = '#27ae60';
+                    if (statusResult.connected) {
+                        // OBS is connected, get scenes
+                        const scenesResponse = await fetch('/api/obs_scenes');
+                        const scenesResult = await scenesResponse.json();
 
-                        sceneButtons.innerHTML = '';
-                        // Filter to only show scenes that start with "Scene - " and reverse the order
-                        const mainScenes = result.scenes.filter(scene => scene.startsWith('Scene - ')).reverse();
-                        mainScenes.forEach(scene => {
-                            const button = document.createElement('button');
-                            button.className = `scene-button ${scene === result.current_scene ? 'active' : ''}`;
-                            button.textContent = scene;
-                            button.onclick = () => changeScene(scene);
-                            sceneButtons.appendChild(button);
-                        });
+                        if (scenesResult.success) {
+                            obsStatus.textContent = statusResult.message;
+                            obsStatus.style.background = '#27ae60';
+
+                            sceneButtons.innerHTML = '';
+                            // Filter to only show scenes that start with "Scene - " and reverse the order
+                            const mainScenes = scenesResult.scenes.filter(scene => scene.startsWith('Scene - ')).reverse();
+                            mainScenes.forEach(scene => {
+                                const button = document.createElement('button');
+                                button.className = `scene-button ${scene === scenesResult.current_scene ? 'active' : ''}`;
+                                button.textContent = scene;
+                                button.onclick = () => changeScene(scene);
+                                sceneButtons.appendChild(button);
+                            });
+                        } else {
+                            obsStatus.textContent = 'OBS Scene Error';
+                            obsStatus.style.background = '#e74c3c';
+                            sceneButtons.innerHTML = '';
+                        }
                     } else {
-                        obsStatus.textContent = 'OBS Not Connected';
+                        // OBS not connected
+                        obsStatus.textContent = statusResult.message;
                         obsStatus.style.background = '#e74c3c';
+                        sceneButtons.innerHTML = '';
                     }
                 } catch (error) {
                     const obsStatus = document.getElementById('obs-status');
                     obsStatus.textContent = 'OBS Connection Error';
                     obsStatus.style.background = '#e74c3c';
+                    document.getElementById('scene-buttons').innerHTML = '';
                 }
             }
 
@@ -1054,6 +1072,30 @@
                 }
             }
 
+            async function reconnectOBS() {
+                try {
+                    showMessage('system-status-message', 'Reconnecting to OBS...', 'warning');
+
+                    const response = await fetch('/api/obs_reconnect', {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showMessage('system-status-message', result.message, 'success');
+                        // Refresh OBS scenes and status after successful reconnection
+                        setTimeout(() => {
+                            loadOBSScenes();
+                            updateSystemStatus();
+                        }, 1000);
+                    } else {
+                        showMessage('system-status-message', result.message, 'error');
+                    }
+                } catch (error) {
+                    showMessage('system-status-message', 'OBS reconnect error: ' + error.message, 'error');
+                }
+            }
+
             // System Status Updates
             async function updateSystemStatus() {
                 try {
@@ -1083,21 +1125,26 @@
                     const systemTwitchStatus = document.getElementById('system-twitch-status');
                     systemTwitchStatus.className = twitchData.success ? 'status-dot online' : 'status-dot offline';
 
-                    // Check OBS connection
-                    const obsResponse = await fetch('/api/obs_scenes');
+                    // Check OBS connection using dedicated status endpoint
+                    const obsResponse = await fetch('/api/obs_status');
                     const obsData = await obsResponse.json();
 
                     const systemObsStatus = document.getElementById('system-obs-status');
-                    systemObsStatus.className = obsData.success ? 'status-dot online' : 'status-dot offline';
+                    systemObsStatus.className = obsData.connected ? 'status-dot online' : 'status-dot offline';
 
-                    // Update stream status
-                    const streamStatusResponse = await fetch('/api/stream_status');
-                    const streamData = await streamStatusResponse.json();
+                    // Update stream status less aggressively to avoid flicker
+                    const currentTime = Date.now();
+                    if (!window.lastStreamStatusUpdate || currentTime - window.lastStreamStatusUpdate > 30000) {
+                        const streamStatusResponse = await fetch('/api/stream_status');
+                        const streamData = await streamStatusResponse.json();
 
-                    const streamStatusDot = document.getElementById('stream-status');
-                    if (streamStatusDot) {
-                        streamStatusDot.className = streamData.success && streamData.is_live ? 'status-dot online' : 'status-dot offline';
-                        streamStatusDot.textContent = streamData.is_live ? '🔴 LIVE' : '⚫ OFF';
+                        const streamStatusDot = document.getElementById('stream-status');
+                        if (streamStatusDot) {
+                            const isLive = streamData.success && streamData.is_live;
+                            streamStatusDot.className = isLive ? 'status-indicator status-live' : 'status-indicator status-offline';
+                            // Don't change text content as it's managed by loadData()
+                        }
+                        window.lastStreamStatusUpdate = currentTime;
                     }
 
                 } catch (error) {
@@ -1143,8 +1190,10 @@
 
             // Auto refresh every 60 seconds (reduced from 30 to minimize jumping)
             setInterval(loadData, 60000);
-            // Update system status less frequently (reduced from 30 to 60 seconds)
-            setInterval(updateSystemStatus, 60000);  // Reduced from 30000ms to 60000ms
+            // Update system status less frequently to reduce flicker
+            setInterval(updateSystemStatus, 60000);
+            // Refresh OBS scenes less frequently to avoid status bar jumping
+            setInterval(loadOBSScenes, 120000);  // Every 2 minutes instead of with updateSystemStatus
         </script>
 </body>
 

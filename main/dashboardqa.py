@@ -607,11 +607,28 @@ def obs_status():
             try:
                 version_info = dashboard_data.obs_client.get_version()
                 current_scene = dashboard_data.obs_client.get_current_program_scene()
+                
+                # Safely extract scene name with multiple fallback methods
+                scene_name = "Unknown"
+                if current_scene is not None:
+                    try:
+                        # Try accessing as object attribute
+                        if hasattr(current_scene, 'scene_name'):
+                            scene_name = getattr(current_scene, 'scene_name', "Unknown")
+                        # Try accessing as dict
+                        elif isinstance(current_scene, dict) and 'scene_name' in current_scene:
+                            scene_name = current_scene['scene_name']
+                        # Try other possible attribute names
+                        elif hasattr(current_scene, 'sceneName'):
+                            scene_name = getattr(current_scene, 'sceneName', "Unknown")
+                    except (AttributeError, KeyError, TypeError):
+                        scene_name = "Unknown"
+                
                 return jsonify({
                     "success": True,
                     "connected": True,
-                    "current_scene": current_scene.scene_name if hasattr(current_scene, 'scene_name') else "Unknown",
-                    "message": f"OBS Connected - Current: {current_scene.scene_name if hasattr(current_scene, 'scene_name') else 'Unknown'}"
+                    "current_scene": scene_name,
+                    "message": f"OBS Connected - Current: {scene_name}"
                 })
             except Exception:
                 # Connection lost
@@ -644,26 +661,6 @@ def obs_status():
             "error": str(e),
             "message": "OBS Status Error"
         })
-                })
-        else:
-            # Check cooldown status
-            current_time = time.time()
-            time_since_attempt = current_time - dashboard_data.last_obs_attempt
-            if time_since_attempt < dashboard_data.obs_connection_cooldown:
-                cooldown_remaining = int(dashboard_data.obs_connection_cooldown - time_since_attempt)
-                return jsonify({
-                    "success": True,
-                    "connected": False,
-                    "message": f"OBS not connected (retry available in {cooldown_remaining}s)"
-                })
-            else:
-                return jsonify({
-                    "success": True,
-                    "connected": False,
-                    "message": "OBS not connected (retry available)"
-                })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
 
 # Q&A API endpoints
 @app.route('/api/display_question', methods=['POST'])

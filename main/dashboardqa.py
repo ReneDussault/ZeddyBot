@@ -258,7 +258,14 @@ class DashboardData:
                 else:
                     return True, "Chat connection test successful (anonymous - read only)"
             elif "Login authentication failed" in response or ":tmi.twitch.tv NOTICE * :Login authentication failed" in response:
-                return False, "Authentication failed - check your access token"
+                # Try to automatically refresh the token
+                print(f"[{self._log_timestamp()}] [CHAT_TEST] Authentication failed, attempting automatic token refresh...")
+                success, refresh_msg, new_token = refresh_twitch_bot_token(self.config_path)
+                if success:
+                    self.load_config()  # Reload config with new token
+                    return True, f"Authentication failed but token auto-refreshed successfully: {refresh_msg}"
+                else:
+                    return False, f"Authentication failed and auto-refresh failed: {refresh_msg}"
             elif ":tmi.twitch.tv NOTICE * :Improperly formatted auth" in response:
                 return False, "Improperly formatted auth - check token format"
             else:
@@ -820,18 +827,29 @@ def toggle_obs_source():
 def get_stream_status():
     """Get current stream status"""
     try:
-        # Get stream info from Twitch API
-        if 'target_channel' in dashboard_data.config:
-            users = {dashboard_data.config['target_channel']: ''}  # We'd need user ID
-            # This is a simplified version - would need proper Twitch API integration
+        # Get real stream info from Twitch API
+        stream_status = dashboard_data.get_twitch_stream_status()
+        
+        if stream_status:
             return jsonify({
                 "success": True,
-                "is_live": False,  # Would check actual stream status
+                "is_live": True,
+                "title": stream_status.get("title", "Live Stream"),
+                "game": stream_status.get("game_name", "Unknown Game"),
+                "viewer_count": stream_status.get("viewer_count", 0),
+                "started_at": stream_status.get("started_at", ""),
+                "thumbnail_url": stream_status.get("thumbnail_url", "")
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "is_live": False,
                 "title": "Stream Offline",
                 "game": "N/A",
-                "viewer_count": 0
+                "viewer_count": 0,
+                "started_at": "",
+                "thumbnail_url": ""
             })
-        return jsonify({"success": False, "error": "Target channel not configured"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 

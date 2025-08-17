@@ -58,7 +58,7 @@ class DashboardData:
 
     def _log_timestamp(self):
         """Get formatted timestamp for logging"""
-        return datetime.now().strftime('%H:%M:%S')
+        return datetime.now().strftime('%d-%m-%Y %H:%M:%S')
 
     def load_config(self):
         with open(self.config_path) as f:

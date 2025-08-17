@@ -29,7 +29,7 @@ logging.getLogger("discord").setLevel(logging.WARNING)
 
 
 def now():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now().strftime('%d-%m-%Y %H:%M:%S')
 
 
 class Config:

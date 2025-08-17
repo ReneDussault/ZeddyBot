@@ -7,7 +7,7 @@ from typing import List, Optional
 import discord
 
 def now():
-    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now().strftime('%d-%m-%Y %H:%M:%S')
 
 class BotModerationManager:
     def __init__(self, twitch_chat_bot, discord_bot=None, channel_id=None):
@@ -126,7 +126,7 @@ class BotModerationManager:
         return {
             "total_known_bots": len(self.known_bots),
             "whitelisted_bots": len(self.whitelist),
-            "last_update": self.last_bot_update.strftime('%Y-%m-%d %H:%M:%S') if self.last_bot_update else "Never"
+            "last_update": self.last_bot_update.strftime('%d-%m-%Y %H:%M:%S') if self.last_bot_update else "Never"
         }
     
     async def moderate_bot(self, bot_name: str, action: str = "timeout", duration: int = 300, reason: str = "Auto-moderated bot") -> bool:

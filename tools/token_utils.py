@@ -49,7 +49,7 @@ def refresh_twitch_bot_token(config_path="../config.json"):
             with open(config_path, 'w') as f:
                 json.dump(config, f, indent=2)
             
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
             message = f"[{timestamp}] Successfully refreshed bot access token"
             print(message)
             

@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 from discord.ext.tasks import loop
 import socket
+import errno
 import asyncio
 from typing import Optional
 import logging
@@ -194,58 +195,132 @@ class TwitchChatBot:
 
 
     def connect(self):
-
         try:
-            # try to refresh the token first
-            # self.twitch_api.refresh_bot_token()
-
+            # Clean up any existing socket
+            if self.socket:
+                try:
+                    self.socket.close()
+                except:
+                    pass
+                self.socket = None
+            
+            # Create new socket with timeout
             self.socket = socket.socket()
+            self.socket.settimeout(10)  # 10 second timeout for connection
             self.socket.connect((self.server, self.port))
 
-            # pass Twitch IRC credentials
+            # Pass Twitch IRC credentials
             self.socket.send(f"PASS oauth:{self.config.twitch_bot_access_token}\r\n".encode("utf-8"))
             self.socket.send(f"NICK {self.config.twitch_bot_username}\r\n".encode("utf-8"))
+            
+            # Wait a moment for authentication
+            import time
+            time.sleep(1)
+            
+            # Join channel
             self.socket.send(f"JOIN #{self.config.target_channel}\r\n".encode("utf-8"))
 
-            # set socket to non-blocking
+            # Set socket to non-blocking after connection is established
             self.socket.setblocking(False)
             self.connected = True
-            print(f"[{now()}] Connected to Twitch chat as {self.config.twitch_bot_username} ")
-
-            # send initial message to confirm bot is working
-            self.send_message("ZeddyBot is now active in chat!")
+            print(f"[{now()}] Connected to Twitch chat as {self.config.twitch_bot_username}")
 
             return True
-        except Exception as e:
-            print(f"Error connecting to Twitch chat: {e}")
+            
+        except socket.timeout:
+            print(f"[{now()}] Timeout connecting to Twitch chat")
             self.connected = False
+            self.socket = None
+            return False
+        except Exception as e:
+            print(f"[{now()}] Error connecting to Twitch chat: {e}")
+            self.connected = False
+            self.socket = None
             return False
 
+
+    def is_connected(self):
+        """Check if the bot is connected and the socket is still valid"""
+        if not self.connected or self.socket is None:
+            return False
+        
+        try:
+            # Try to send a ping to test if connection is alive
+            self.socket.send("PING :tmi.twitch.tv\r\n".encode("utf-8"))
+            return True
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            print(f"[{now()}] Connection test failed, marking as disconnected")
+            self.connected = False
+            self.socket = None
+            return False
+        except Exception:
+            return False
 
     def disconnect(self):
         if self.socket:
             try:
+                # Send QUIT message before closing
+                try:
+                    self.socket.send("QUIT\r\n".encode("utf-8"))
+                except:
+                    pass  # Ignore errors when sending QUIT
                 self.socket.close()
             except Exception as e:
-                print(f"Error disconnecting to Twitch chat: {e}")
-                pass
+                print(f"[{now()}] Error disconnecting from Twitch chat: {e}")
+            finally:
+                self.socket = None
         self.connected = False
 
 
     def send_message(self, message):
+        # Try to connect if not connected
         if not self.connected or self.socket is None:
+            print(f"[{now()}] Twitch chat not connected, attempting to connect...")
             if not self.connect():
+                print(f"[{now()}] Failed to connect to Twitch chat")
                 return False
 
         try:
             if self.socket is None:
                 return False
+            
+            # Test if socket is still alive by trying to send ping first
+            try:
+                self.socket.send("PING :tmi.twitch.tv\r\n".encode("utf-8"))
+            except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                print(f"[{now()}] Socket connection lost ({e}), reconnecting...")
+                self.connected = False
+                if not self.connect():
+                    return False
+            
+            # Send the actual message
             self.socket.send(f"PRIVMSG #{self.config.target_channel} :{message}\r\n".encode("utf-8"))
             print(f"[{now()}] Sending to Twitch chat: {message}")
             return True
-        except Exception as e:
-            print(f"Error sending message to Twitch chat: {e}")
+            
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"[{now()}] Twitch chat connection error ({e}), marking as disconnected")
             self.connected = False
+            self.socket = None
+            
+            # Try to reconnect and send again
+            print(f"[{now()}] Attempting to reconnect and resend message...")
+            if self.connect() and self.socket is not None:
+                try:
+                    self.socket.send(f"PRIVMSG #{self.config.target_channel} :{message}\r\n".encode("utf-8"))
+                    print(f"[{now()}] Message sent after reconnection: {message}")
+                    return True
+                except Exception as retry_e:
+                    print(f"[{now()}] Failed to send message after reconnection: {retry_e}")
+                    return False
+            else:
+                print(f"[{now()}] Failed to reconnect to Twitch chat")
+                return False
+                
+        except Exception as e:
+            print(f"[{now()}] Unexpected error sending message to Twitch chat: {e}")
+            self.connected = False
+            self.socket = None
             return False
 
 
@@ -259,7 +334,8 @@ class TwitchChatBot:
             
             for line in lines:
                 if line.startswith("PING"):
-                    self.socket.send("PONG\r\n".encode("utf-8"))
+                    if self.socket is not None:
+                        self.socket.send("PONG\r\n".encode("utf-8"))
                 elif "PRIVMSG" in line:
                     # Check for bot moderation commands
                     self._handle_chat_message(line)
@@ -267,8 +343,12 @@ class TwitchChatBot:
                 elif any(code in line for code in ["001", "002", "003", "004", "375", "372", "376"]):
                     continue  # Don't log these verbose messages
                     
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            print(f"[{now()}] Twitch chat connection lost during ping check: {e}")
+            self.connected = False
+            self.socket = None
         except Exception as e:
-            # no data to read or other socket errors
+            # No data to read or other non-critical socket errors
             pass
 
     def _handle_chat_message(self, message_data):
@@ -736,7 +816,15 @@ class ZeddyBot(commands.Bot):
 
     @loop(minutes=2)
     async def check_twitch_ping(self):
-        self.twitch_chat_bot.check_for_ping()
+        # Check if chat bot is connected, reconnect if needed
+        if not self.twitch_chat_bot.is_connected():
+            print(f"[{now()}] Twitch chat bot disconnected, attempting reconnection...")
+            if self.twitch_chat_bot.connect():
+                print(f"[{now()}] Twitch chat bot reconnected successfully")
+            else:
+                print(f"[{now()}] Failed to reconnect Twitch chat bot")
+        else:
+            self.twitch_chat_bot.check_for_ping()
 
 
     @loop(seconds=60)

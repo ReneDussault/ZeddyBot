@@ -916,7 +916,7 @@ def send_quick_message():
             "welcome": "Welcome everyone! Thanks for stopping by! 🎮",
             "follow": "Thanks for the follow! Really appreciate the support! ❤️",
             "brb": "Be right back in a few minutes! Don't go anywhere! ⏰",
-            "ending": "Thanks for watching! Stream ending soon, catch you next time! 👋",
+            "ending": "Thanks for watching! Stream ended, catch you next time! 👋",
             "lurk": "Thanks for lurking! Appreciate you being here! 👀"
         }
         

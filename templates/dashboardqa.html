@@ -106,6 +106,8 @@
 
         .status-live {
             background: #48bb78;
+            animation: pulse-live 2s infinite;
+            box-shadow: 0 0 8px rgba(72, 187, 120, 0.6);
         }
 
         .status-offline {
@@ -114,6 +116,18 @@
 
         .status-connected {
             background: #38b2ac;
+        }
+
+        @keyframes pulse-live {
+            0% {
+                box-shadow: 0 0 8px rgba(72, 187, 120, 0.6);
+            }
+            50% {
+                box-shadow: 0 0 15px rgba(72, 187, 120, 0.8);
+            }
+            100% {
+                box-shadow: 0 0 8px rgba(72, 187, 120, 0.6);
+            }
         }
 
         .stream-info {
@@ -820,12 +834,18 @@
                         document.getElementById('stream-title').textContent = data.stream.title || 'No Title';
                         document.getElementById('stream-game').textContent = data.stream.game || 'No Game';
                         document.getElementById('stream-viewers').textContent = data.stream.viewers.toLocaleString();
+                        
+                        // Store stream status for other functions to use
+                        window.currentStreamStatus = { isLive: true, lastUpdate: Date.now() };
                     } else {
                         streamStatus.className = 'status-indicator status-offline';
                         streamLive.textContent = 'Offline';
                         document.getElementById('stream-title').textContent = '-';
                         document.getElementById('stream-game').textContent = '-';
                         document.getElementById('stream-viewers').textContent = '0';
+                        
+                        // Store stream status for other functions to use
+                        window.currentStreamStatus = { isLive: false, lastUpdate: Date.now() };
                     }
 
                     // Update last update time
@@ -833,6 +853,8 @@
 
                 } catch (error) {
                     console.error('Error loading data:', error);
+                    // On error, mark as offline
+                    window.currentStreamStatus = { isLive: false, lastUpdate: Date.now() };
                 }
             }
 
@@ -1132,19 +1154,18 @@
                     const systemObsStatus = document.getElementById('system-obs-status');
                     systemObsStatus.className = obsData.connected ? 'status-dot online' : 'status-dot offline';
 
-                    // Update stream status less aggressively to avoid flicker
-                    const currentTime = Date.now();
-                    if (!window.lastStreamStatusUpdate || currentTime - window.lastStreamStatusUpdate > 30000) {
-                        const streamStatusResponse = await fetch('/api/stream_status');
-                        const streamData = await streamStatusResponse.json();
-
+                    // Use cached stream status from loadData instead of making duplicate API calls
+                    // This prevents conflicts and flicker in the stream status indicator
+                    if (window.currentStreamStatus) {
                         const streamStatusDot = document.getElementById('stream-status');
                         if (streamStatusDot) {
-                            const isLive = streamData.success && streamData.is_live;
-                            streamStatusDot.className = isLive ? 'status-indicator status-live' : 'status-indicator status-offline';
-                            // Don't change text content as it's managed by loadData()
+                            // Only update if the cached status is recent (within 2 minutes)
+                            const timeSinceUpdate = Date.now() - window.currentStreamStatus.lastUpdate;
+                            if (timeSinceUpdate < 120000) { // 2 minutes
+                                const isLive = window.currentStreamStatus.isLive;
+                                streamStatusDot.className = isLive ? 'status-indicator status-live' : 'status-indicator status-offline';
+                            }
                         }
-                        window.lastStreamStatusUpdate = currentTime;
                     }
 
                 } catch (error) {
@@ -1188,12 +1209,12 @@
             // Initialize new features
             setTimeout(initializeDashboard, 1000);
 
-            // Auto refresh every 60 seconds (reduced from 30 to minimize jumping)
-            setInterval(loadData, 60000);
-            // Update system status less frequently to reduce flicker
-            setInterval(updateSystemStatus, 60000);
+            // Stream status needs more frequent updates when transitioning live/offline
+            setInterval(loadData, 45000);  // Check every 45 seconds for stream status
+            // Update system status less frequently to reduce load
+            setInterval(updateSystemStatus, 90000);  // Every 90 seconds for Discord/Twitch/OBS
             // Refresh OBS scenes less frequently to avoid status bar jumping
-            setInterval(loadOBSScenes, 120000);  // Every 2 minutes instead of with updateSystemStatus
+            setInterval(loadOBSScenes, 120000);  // Every 2 minutes for OBS scenes
         </script>
 </body>
 

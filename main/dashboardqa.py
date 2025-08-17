@@ -47,6 +47,12 @@ class DashboardData:
         self.obs_client = None
         self.last_obs_attempt = 0  # Rate limiting for OBS connections
         self.obs_connection_cooldown = 30  # Wait 30 seconds between connection attempts
+        
+        # Stream status caching to improve reliability
+        self.cached_stream_status = None
+        self.last_stream_check = 0
+        self.stream_cache_duration = 30  # Cache for 30 seconds
+        
         self.connect_obs()
         self.start_chat_reader()
 
@@ -186,33 +192,76 @@ class DashboardData:
                     self.chat_sock.send("PONG :tmi.twitch.tv\r\n".encode('utf-8'))
 
     def get_twitch_stream_status(self):
+        # Check if we have cached data that's still fresh
+        current_time = time.time()
+        if (self.cached_stream_status is not None and 
+            current_time - self.last_stream_check < self.stream_cache_duration):
+            return self.cached_stream_status
+        
         try:
             headers = {
                 "Authorization": f"Bearer {self.config['access_token']}",
                 "Client-Id": self.config['twitch_client_id']
             }
+            
+            # Get user ID first
             user_response = requests.get(
                 "https://api.twitch.tv/helix/users",
                 params={"login": self.config.get("target_channel", "")},
-                headers=headers
+                headers=headers,
+                timeout=10  # Add timeout to prevent hanging
             )
+            
             if user_response.status_code != 200:
+                print(f"[{self._log_timestamp()}] Failed to get user info: {user_response.status_code}")
+                self.cached_stream_status = None
+                self.last_stream_check = current_time
                 return None
+                
             user_data = user_response.json()["data"]
             if not user_data:
+                print(f"[{self._log_timestamp()}] No user data found for channel: {self.config.get('target_channel', '')}")
+                self.cached_stream_status = None
+                self.last_stream_check = current_time
                 return None
+                
             user_id = user_data[0]["id"]
+            
+            # Get stream status
             stream_response = requests.get(
                 "https://api.twitch.tv/helix/streams",
                 params={"user_id": user_id},
-                headers=headers
+                headers=headers,
+                timeout=10  # Add timeout to prevent hanging
             )
+            
             if stream_response.status_code == 200:
                 streams = stream_response.json()["data"]
-                return streams[0] if streams else None
+                stream_data = streams[0] if streams else None
+                
+                # Cache the result
+                self.cached_stream_status = stream_data
+                self.last_stream_check = current_time
+                
+                return stream_data
+            else:
+                print(f"[{self._log_timestamp()}] Failed to get stream info: {stream_response.status_code}")
+                self.cached_stream_status = None
+                self.last_stream_check = current_time
+                return None
+                
+        except requests.exceptions.Timeout:
+            print(f"[{self._log_timestamp()}] Twitch API timeout")
+            # Return cached data if available, otherwise None
+            return self.cached_stream_status
+        except requests.exceptions.RequestException as e:
+            print(f"[{self._log_timestamp()}] Twitch API request error: {e}")
+            # Return cached data if available, otherwise None
+            return self.cached_stream_status
         except Exception as e:
             print(f"[{self._log_timestamp()}] Error getting stream status: {e}")
-            return None
+            # Don't update cache on unexpected errors, return existing cache if available
+            return self.cached_stream_status
 
     def update_data(self):
         stream_status = self.get_twitch_stream_status()
@@ -397,19 +446,37 @@ def qna_display():
 
 @app.route('/api/status')
 def api_status():
-    stream_status = dashboard_data.get_twitch_stream_status()
-    return jsonify({
-        "stream": {
-            "live": stream_status is not None,
-            "title": stream_status["title"] if stream_status else "",
-            "game": stream_status["game_name"] if stream_status else "",
-            "viewers": stream_status["viewer_count"] if stream_status else 0,
-            "started_at": stream_status["started_at"] if stream_status else ""
-        },
-        "discord": dashboard_data.discord_stats,
-        "bot": dashboard_data.bot_status,
-        "watchlist": dashboard_data.config["watchlist"] if dashboard_data.config and "watchlist" in dashboard_data.config else []
-    })
+    try:
+        stream_status = dashboard_data.get_twitch_stream_status()
+        return jsonify({
+            "stream": {
+                "live": stream_status is not None,
+                "title": stream_status["title"] if stream_status else "",
+                "game": stream_status["game_name"] if stream_status else "",
+                "viewers": stream_status["viewer_count"] if stream_status else 0,
+                "started_at": stream_status["started_at"] if stream_status else ""
+            },
+            "discord": dashboard_data.discord_stats,
+            "bot": dashboard_data.bot_status,
+            "watchlist": dashboard_data.config["watchlist"] if dashboard_data.config and "watchlist" in dashboard_data.config else [],
+            "cache_age": time.time() - dashboard_data.last_stream_check if dashboard_data.last_stream_check > 0 else 0
+        })
+    except Exception as e:
+        print(f"[{dashboard_data._log_timestamp()}] Error in api_status: {e}")
+        # Return fallback data on error
+        return jsonify({
+            "stream": {
+                "live": False,
+                "title": "",
+                "game": "",
+                "viewers": 0,
+                "started_at": ""
+            },
+            "discord": dashboard_data.discord_stats,
+            "bot": dashboard_data.bot_status,
+            "watchlist": [],
+            "error": "Failed to fetch stream status"
+        })
 
 @app.route('/api/history')
 def api_history():

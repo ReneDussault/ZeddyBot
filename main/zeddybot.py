@@ -466,7 +466,6 @@ class DashboardData:
                         'message': message,
                         'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
                     })
-                    print(f"[{self._log_timestamp()}] Chat message added: {user_part}: {message}")
         except Exception as e:
             print(f"[{self._log_timestamp()}] Error parsing message: {e}")
             

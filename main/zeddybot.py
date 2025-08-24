@@ -176,6 +176,8 @@ class TwitchChatBot:
                 self.connected = True
                 self.socket.settimeout(None)  # Remove timeout for normal operation
                 print(f"[{now()}] Connected to Twitch chat as {self.config.twitch_bot_username}")
+                print(f"[{now()}] Sending Twitch chat messages...")
+                self.send_message("ZeddyBot connected!")
                 return True
             else:
                 print(f"[{now()}] Unexpected response during connection: {response}")
@@ -1283,7 +1285,7 @@ def run_flask():
 
 
 if __name__ == "__main__":
-    print(f"[{now()}] Starting Unified ZeddyBot...")
+    print(f"[{now()}] Starting ZeddyBot...")
     print(f"[{now()}] HTTP server starting on http://0.0.0.0:5000 (Dashboard + Discord stats API)")
     
     # Start Flask in a separate thread

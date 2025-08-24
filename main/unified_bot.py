@@ -7,9 +7,7 @@ import discord
 from discord.ext import commands
 from discord.ext.tasks import loop
 import socket
-import errno
 import asyncio
-from typing import Optional
 import logging
 from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
@@ -233,16 +231,18 @@ class TwitchChatBot:
                 raise BrokenPipeError("Connection lost")
                 
             # Send the actual message
-            message_to_send = f"PRIVMSG {self.channel} :{message}\r\n"
-            self.socket.send(message_to_send.encode('utf-8'))
-            print(f"[{now()}] Sending to Twitch chat: {message}")
-            
-            # Add sent message to chat display (since Twitch doesn't echo it back)
-            self.dashboard_data.chat_messages.append({
-                'username': self.config.twitch_bot_username,
-                'message': message,
-                'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-            })
+            if self.socket is not None:
+                message_to_send = f"PRIVMSG {self.channel} :{message}\r\n"
+                self.socket.send(message_to_send.encode('utf-8'))
+                print(f"[{now()}] Sending to Twitch chat: {message}")
+                
+                # Add sent message to chat display (since Twitch doesn't echo it back)
+                if self.dashboard_data is not None:
+                    self.dashboard_data.chat_messages.append({
+                        'username': self.config.twitch_bot_username,
+                        'message': message,
+                        'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+                    })
             
             return True
             
@@ -254,10 +254,13 @@ class TwitchChatBot:
             print(f"[{now()}] Attempting to reconnect and resend message...")
             if self.connect():
                 try:
-                    message_to_send = f"PRIVMSG {self.channel} :{message}\r\n"
-                    self.socket.send(message_to_send.encode('utf-8'))
-                    print(f"[{now()}] Message sent after reconnection: {message}")
-                    return True
+                    if self.socket is not None:
+                        message_to_send = f"PRIVMSG {self.channel} :{message}\r\n"
+                        self.socket.send(message_to_send.encode('utf-8'))
+                        print(f"[{now()}] Message sent after reconnection: {message}")
+                        return True
+                    else:
+                        return False
                 except Exception as retry_e:
                     print(f"[{now()}] Failed to send message after reconnection: {retry_e}")
                     return False
@@ -751,7 +754,8 @@ class ZeddyBot(commands.Bot):
         """Send Discord notification when stream goes live"""
         try:
             channel = self.get_channel(self.config.discord_channel_id)
-            if channel:
+            # Only send to text-based channels that support sending messages
+            if isinstance(channel, (discord.TextChannel, discord.DMChannel, discord.Thread)):
                 embed = discord.Embed(
                     title=f"🔴 {self.config.target_channel} is now live!",
                     description=stream_info["title"],
@@ -991,8 +995,18 @@ def get_obs_scene_items(scene_name):
         return jsonify({'error': 'OBS not connected'}), 503
     
     try:
-        scene_items = dashboard_data.obs_client.get_scene_item_list(scene_name)
-        return jsonify(scene_items.scene_items)
+        scene_items_response = dashboard_data.obs_client.get_scene_item_list(scene_name)
+        if scene_items_response is not None:
+            # Try accessing as object attribute first
+            scene_items = getattr(scene_items_response, 'scene_items', None)
+            if scene_items is not None:
+                return jsonify(scene_items)
+            # Try accessing as dict
+            elif isinstance(scene_items_response, dict) and 'scene_items' in scene_items_response:
+                return jsonify(scene_items_response['scene_items'])
+        
+        # Return empty list if no scene items found
+        return jsonify([])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

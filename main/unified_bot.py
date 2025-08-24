@@ -131,10 +131,10 @@ class TwitchAPI:
         return response.json()["access_token"]
 
     def refresh_bot_token(self):
-        success, message, new_token = refresh_twitch_bot_token("../config.json")
+        success, message, new_token = refresh_twitch_bot_token("config.json")
         if success:
-            # Reload config to get the updated token
-            with open("../config.json") as config_file:
+            # Reload the config with new token
+            with open("config.json") as config_file:
                 self.config.data = json.load(config_file)
             # Message already printed by refresh_twitch_bot_token utility
             return True
@@ -236,6 +236,14 @@ class TwitchChatBot:
             message_to_send = f"PRIVMSG {self.channel} :{message}\r\n"
             self.socket.send(message_to_send.encode('utf-8'))
             print(f"[{now()}] Sending to Twitch chat: {message}")
+            
+            # Add sent message to chat display (since Twitch doesn't echo it back)
+            self.dashboard_data.chat_messages.append({
+                'username': self.config.twitch_bot_username,
+                'message': message,
+                'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+            })
+            
             return True
             
         except (BrokenPipeError, socket.error, OSError) as e:
@@ -309,6 +317,56 @@ class DashboardData:
         self.cached_stream_status = None
         self.last_stream_check = 0
         self.stream_cache_duration = 30  # Cache for 30 seconds
+
+    def test_chat_connection(self):
+        """Test if chat connection credentials are working without sending a message"""
+        try:
+            if not self.config.get('target_channel'):
+                return False, "Missing target_channel in config"
+            
+            # Test connection to Twitch IRC
+            sock = socket.socket()
+            sock.settimeout(5)
+            sock.connect(("irc.chat.twitch.tv", 6667))
+            
+            # Try with bot token if available, otherwise use anonymous
+            if 'twitch_bot_access_token' in self.config and self.config['twitch_bot_access_token']:
+                sock.send(f"PASS oauth:{self.config['twitch_bot_access_token']}\r\n".encode('utf-8'))
+                sock.send(f"NICK {self.config.get('twitch_bot_username', 'Zeddy_bot')}\r\n".encode('utf-8'))
+            else:
+                # Anonymous connection (read-only)
+                sock.send(f"NICK justinfan12345\r\n".encode('utf-8'))
+            
+            # Read response to check if authentication was successful
+            response = sock.recv(1024).decode('utf-8', errors='ignore')
+            # Only print non-verbose IRC messages for debugging
+            if not any(code in response for code in ["001", "002", "003", "004", "375", "372", "376"]):
+                print(f"[CHAT_TEST] IRC Response: {response}")  # Debug output
+            sock.close()
+            
+            if ":tmi.twitch.tv 001" in response:  # Welcome message indicates success
+                if 'twitch_bot_access_token' in self.config and self.config['twitch_bot_access_token']:
+                    return True, "Chat connection test successful (authenticated bot)"
+                else:
+                    return True, "Chat connection test successful (anonymous - read only)"
+            elif "Login authentication failed" in response or ":tmi.twitch.tv NOTICE * :Login authentication failed" in response:
+                # Try to automatically refresh the token
+                print(f"[{self._log_timestamp()}] [CHAT_TEST] Authentication failed, attempting automatic token refresh...")
+                success, refresh_msg, new_token = refresh_twitch_bot_token("config.json")
+                if success:
+                    self.load_config()  # Reload config with new token
+                    return True, f"Authentication failed but token auto-refreshed successfully: {refresh_msg}"
+                else:
+                    return False, f"Authentication failed and auto-refresh failed: {refresh_msg}"
+            elif ":tmi.twitch.tv NOTICE * :Improperly formatted auth" in response:
+                return False, "Improperly formatted auth - check token format"
+            else:
+                return False, f"Unexpected response: {response}"
+                
+        except socket.timeout:
+            return False, "Connection timeout - check network connection"
+        except Exception as e:
+            return False, f"Connection test failed: {str(e)}"
 
     def _log_timestamp(self):
         """Get formatted timestamp for logging"""
@@ -389,27 +447,79 @@ class DashboardData:
         return self.obs_client is not None
 
     def parse_chat_message(self, line):
-        """Parse incoming IRC chat messages"""
+        """Parse incoming IRC chat messages using the same method as original dashboardqa.py"""
         try:
             if 'PRIVMSG' in line:
-                # Parse IRC message format: :user!user@user.tmi.twitch.tv PRIVMSG #channel :message
-                parts = line.split(' ', 3)
-                if len(parts) >= 4:
-                    user_part = parts[0][1:]  # Remove leading ':'
-                    user_part = user_part.split('!')[0]  # Extract username
-                    message = parts[3][1:]  # Remove leading ':'
+                # Parse IRC message format using colon splitting (original method)
+                parts = line.split(':', 2)
+                if len(parts) >= 3:
+                    user_part = parts[1].split('!')[0]
+                    message = parts[2]
                     
                     self.chat_messages.append({
                         'username': user_part,
                         'message': message,
                         'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
                     })
+                    print(f"[{self._log_timestamp()}] Chat message added: {user_part}: {message}")
         except Exception as e:
             print(f"[{self._log_timestamp()}] Error parsing message: {e}")
             
         # Handle PING to keep connection alive
         if 'PING' in line:
             return 'PONG :tmi.twitch.tv\r\n'
+
+    def display_question_on_obs(self, username, message):
+        """Display Q&A using browser source (primary method)"""
+        if not self.obs_client:
+            return False, "OBS not connected - use reconnect button"
+        
+        try:
+            # Store the question data for browser source to fetch via API
+            self.current_question = {
+                'username': username,
+                'message': message,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Enable the Q&A nested scene (ID 73) which contains the browser source
+            try:
+                self.obs_client.set_scene_item_enabled(
+                    scene_name="Scene - In Game",
+                    item_id=73,
+                    enabled=True
+                )
+                return True, "Question displayed on stream via browser source"
+            except Exception as scene_error:
+                print(f"[{self._log_timestamp()}] [OBS] Scene item ID 73 not found: {scene_error}")
+                return False, f"Failed to show Q&A scene: {scene_error}"
+
+        except Exception as e:
+            return False, f"OBS error: {str(e)}"
+
+    def hide_question_on_obs(self):
+        """Hide Q&A browser source"""
+        if not self.obs_client:
+            return False, "OBS not connected - use reconnect button"
+        
+        try:
+            # Clear the question data
+            self.current_question = {}
+            
+            # Hide the Q&A nested scene (ID 73)
+            try:
+                self.obs_client.set_scene_item_enabled(
+                    scene_name="Scene - In Game",
+                    item_id=73,
+                    enabled=False
+                )
+                return True, "Question hidden from stream"
+            except Exception as scene_error:
+                print(f"[{self._log_timestamp()}] [OBS] Scene item ID 73 not found: {scene_error}")
+                return False, f"Failed to hide Q&A scene: {scene_error}"
+
+        except Exception as e:
+            return False, f"OBS error: {str(e)}"
 
     def get_twitch_stream_status(self):
         """Get current stream status with caching"""
@@ -514,6 +624,7 @@ class ZeddyBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
+        intents.presences = True
         super().__init__(command_prefix='!', intents=intents)
         
         self.config = config
@@ -666,8 +777,8 @@ class ZeddyBot(commands.Bot):
 
 
 # Global instances
-config = Config("../config.json")
-dashboard_data = DashboardData("../config.json")
+config = Config("config.json")
+dashboard_data = DashboardData("config.json")
 bot = ZeddyBot(config, dashboard_data)
 
 # Flask app setup
@@ -688,7 +799,7 @@ def qna_display():
 
 @app.route('/api/status')
 def api_status():
-    """Get comprehensive status information"""
+    """Get comprehensive status information in the format expected by the dashboard"""
     stream_status = dashboard_data.get_twitch_stream_status()
     
     # Fallback data if stream status fails
@@ -702,17 +813,20 @@ def api_status():
             'thumbnail_url': ''
         }
     
+    # Convert to expected format for the dashboard template
     return jsonify({
-        'stream': stream_status,
+        'stream': {
+            'live': stream_status['is_live'],
+            'title': stream_status['title'],
+            'game': stream_status['game_name'], 
+            'viewers': stream_status['viewer_count']
+        },
         'discord': dashboard_data.discord_stats,
         'bot_status': dashboard_data.bot_status,
         'obs_connected': dashboard_data.obs_client is not None
     })
 
-@app.route('/api/discord_stats')
-def discord_stats():
-    """Get Discord statistics - compatibility route"""
-    return jsonify(dashboard_data.discord_stats)
+
 
 @app.route('/api/history')
 def get_history():
@@ -752,13 +866,27 @@ def send_quick_message():
     try:
         data = request.get_json()
         message_index = data.get('index')
+        message_type = data.get('type')
         
-        quick_messages = dashboard_data.config.get('quick_messages', [])
+        # Define message mapping for the template's message types
+        message_map = {
+            'welcome': "Thanks for watching! Welcome to the stream!",
+            'follow': "Thanks for the follow! Don't forget to hit that notification bell!",
+            'brb': "Be right back! Thanks for your patience!",
+            'ending': "Thanks for watching! Stream ending soon!",
+            'lurk': "Thanks for the lurk! Enjoy the stream!"
+        }
         
-        if message_index is None or message_index < 0 or message_index >= len(quick_messages):
-            return jsonify({'success': False, 'error': 'Invalid message index'}), 400
-        
-        message = quick_messages[message_index]
+        # Handle both new format (type) and old format (index)
+        if message_type:
+            message = message_map.get(message_type, f"Unknown message type: {message_type}")
+        elif message_index is not None:
+            quick_messages = dashboard_data.config.get('quick_messages', [])
+            if message_index < 0 or message_index >= len(quick_messages):
+                return jsonify({'success': False, 'error': 'Invalid message index'}), 400
+            message = quick_messages[message_index]
+        else:
+            return jsonify({'success': False, 'error': 'No message type or index provided'}), 400
         
         if bot.twitch_chat_bot.send_message(message):
             return jsonify({'success': True, 'message': message})
@@ -772,17 +900,82 @@ def send_quick_message():
 def get_chat():
     return jsonify(list(dashboard_data.chat_messages))
 
+@app.route('/api/discord_stats', methods=['GET'])
+def get_discord_stats():
+    """Get Discord server stats from the integrated Discord bot"""
+    try:
+        if bot and bot.is_ready():
+            total_members = 0
+            online_members = 0
+            total_humans = 0
+            
+            # Get stats from all guilds
+            for guild in bot.guilds:
+                total_members += guild.member_count or 0
+                for member in guild.members:
+                    if not member.bot:
+                        total_humans += 1
+                        if member.status != discord.Status.offline:
+                            online_members += 1
+            
+            return jsonify({
+                "success": True,
+                "stats": {
+                    "online_members": online_members,
+                    "total_members": total_members,
+                    "total_humans": total_humans,
+                    "bot_connected": True
+                }
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "stats": {
+                    "online_members": 0,
+                    "total_members": 0,
+                    "total_humans": 0,
+                    "bot_connected": False
+                },
+                "error": "Discord bot not connected"
+            })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "stats": {
+                "online_members": 0,
+                "total_members": 0,
+                "total_humans": 0,
+                "bot_connected": False
+            },
+            "error": f"Error getting Discord stats: {str(e)}"
+        })
+
+@app.route('/api/test_chat_messages', methods=['POST'])
+def add_test_chat_messages():
+    """Add some test messages to verify chat display is working"""
+    test_messages = [
+        {'username': 'TestUser1', 'message': 'Hello world!', 'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')},
+        {'username': 'TestUser2', 'message': 'How is everyone doing?', 'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')},
+        {'username': 'TestUser3', 'message': 'Great stream!', 'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')}
+    ]
+    
+    for msg in test_messages:
+        dashboard_data.chat_messages.append(msg)
+    
+    return jsonify({'success': True, 'message': f'Added {len(test_messages)} test messages'})
+
 @app.route('/api/test_chat', methods=['GET'])
 def test_chat():
-    if bot.twitch_chat_bot.send_message("Test message from dashboard"):
-        return jsonify({'success': True})
+    success, message = dashboard_data.test_chat_connection()
+    if success:
+        return jsonify({'success': True, 'message': message})
     else:
-        return jsonify({'success': False}), 500
+        return jsonify({'success': False, 'error': message}), 500
 
 @app.route('/api/refresh_token', methods=['POST'])
 def refresh_token():
     try:
-        success, message, new_token = refresh_twitch_bot_token("../config.json")
+        success, message, new_token = refresh_twitch_bot_token("config.json")
         if success:
             # Reload config to get updated token
             dashboard_data.load_config()
@@ -852,51 +1045,107 @@ def obs_reconnect():
 
 @app.route('/api/obs_status', methods=['GET'])
 def obs_status():
-    if dashboard_data.obs_client:
-        try:
-            # Test connection with a simple request
-            version_info = dashboard_data.obs_client.get_version()
-            return jsonify({
-                'connected': True,
-                'version': version_info.obs_version,
-                'websocket_version': version_info.obs_web_socket_version
-            })
-        except:
-            # Connection failed, clean up
-            dashboard_data.obs_client = None
-            return jsonify({'connected': False})
-    else:
-        return jsonify({'connected': False})
+    """Get OBS connection status without attempting reconnection"""
+    try:
+        if dashboard_data.obs_client:
+            # Quick test to see if connection is still valid
+            try:
+                version_info = dashboard_data.obs_client.get_version()
+                current_scene = dashboard_data.obs_client.get_current_program_scene()
+                
+                # Safely extract scene name with multiple fallback methods
+                scene_name = "Unknown"
+                if current_scene is not None:
+                    try:
+                        # Try accessing as object attribute
+                        if hasattr(current_scene, 'scene_name'):
+                            scene_name = getattr(current_scene, 'scene_name', "Unknown")
+                        # Try accessing as dict
+                        elif isinstance(current_scene, dict) and 'scene_name' in current_scene:
+                            scene_name = current_scene['scene_name']
+                        # Try other possible attribute names
+                        elif hasattr(current_scene, 'sceneName'):
+                            scene_name = getattr(current_scene, 'sceneName', "Unknown")
+                    except (AttributeError, KeyError, TypeError):
+                        scene_name = "Unknown"
+                
+                return jsonify({
+                    "success": True,
+                    "connected": True,
+                    "current_scene": scene_name,
+                    "message": f"OBS Connected - Current: {scene_name}"
+                })
+            except Exception:
+                # Connection lost
+                dashboard_data.obs_client = None
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "message": "OBS connection lost"
+                })
+        else:
+            # Check cooldown status
+            current_time = time.time()
+            time_since_attempt = current_time - dashboard_data.last_obs_attempt
+            
+            if time_since_attempt < dashboard_data.obs_connection_cooldown:
+                time_remaining = int(dashboard_data.obs_connection_cooldown - time_since_attempt)
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "message": f"OBS not connected (retry in {time_remaining}s)"
+                })
+            else:
+                return jsonify({
+                    "success": True,
+                    "connected": False,
+                    "message": "OBS not connected - use reconnect button"
+                })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "connected": False,
+            "message": f"Error checking OBS status: {str(e)}"
+        })
 
 @app.route('/api/display_question', methods=['POST'])
 def display_question():
     try:
         data = request.get_json()
-        question = data.get('question', '')
-        username = data.get('username', 'Anonymous')
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"})
         
-        dashboard_data.current_question = {
-            'question': question,
-            'username': username,
-            'visible': True,
-            'timestamp': datetime.now().isoformat()
-        }
+        username = data.get('username', '')
+        message = data.get('message', '')
         
-        return jsonify({'success': True})
+        if not username or not message:
+            return jsonify({"success": False, "error": "Missing username or message"})
+        
+        # Use the OBS browser source method (primary)
+        ok, msg = dashboard_data.display_question_on_obs(username, message)
+        
+        return jsonify({"success": ok, "message": msg})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/hide_question', methods=['POST'])
 def hide_question():
     try:
-        dashboard_data.current_question = {'visible': False}
-        return jsonify({'success': True})
+        # Use the OBS browser source method
+        ok, msg = dashboard_data.hide_question_on_obs()
+        return jsonify({"success": ok, "message": msg})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/current_question')
 def get_current_question():
-    return jsonify(dashboard_data.current_question)
+    try:
+        # Include the current theme with the question data
+        question_data = dashboard_data.current_question.copy() if dashboard_data.current_question else {}
+        question_data['theme'] = getattr(dashboard_data, 'qna_theme', 'dark')
+        return jsonify(question_data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/qna_theme', methods=['POST'])
 def set_qna_theme():
@@ -962,36 +1211,57 @@ def test_notification():
 
 @app.route('/api/obs_scene', methods=['POST'])
 def change_obs_scene():
-    if not dashboard_data.obs_client:
-        return jsonify({'error': 'OBS not connected'}), 503
-    
+    """Change OBS scene"""
     try:
-        data = request.get_json()
-        scene_name = data.get('scene_name')
+        data = request.json if request.json else {}
+        scene_name = data.get('scene_name', '')
         
-        if not scene_name:
-            return jsonify({'error': 'Scene name required'}), 400
+        if not dashboard_data.obs_client:
+            return jsonify({"success": False, "error": "OBS not connected"})
         
         dashboard_data.obs_client.set_current_program_scene(scene_name)
-        return jsonify({'success': True, 'scene': scene_name})
+        return jsonify({
+            "success": True,
+            "message": f"Scene changed to: {scene_name}"
+        })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)})
 
 @app.route('/api/obs_scenes', methods=['GET'])
 def get_obs_scenes():
-    if not dashboard_data.obs_client:
-        return jsonify({'error': 'OBS not connected'}), 503
-    
+    """Get list of available OBS scenes"""
     try:
-        scenes_response = dashboard_data.obs_client.get_scene_list()
-        scenes = [scene['sceneName'] for scene in scenes_response.scenes]
-        current_scene = scenes_response.current_program_scene_name
-        return jsonify({
-            'scenes': scenes,
-            'current_scene': current_scene
-        })
+        if not dashboard_data.obs_client:
+            return jsonify({"success": False, "error": "OBS not connected - use reconnect button"})
+        
+        # Test the connection first
+        try:
+            scenes_response = dashboard_data.obs_client.get_scene_list()
+            scene_list = []
+            current_scene = None
+            
+            if scenes_response is not None:
+                # Handle both object and dict return types for scenes
+                if hasattr(scenes_response, 'scenes'):
+                    scene_items = getattr(scenes_response, 'scenes', [])
+                    scene_list = [scene['sceneName'] if isinstance(scene, dict) else getattr(scene, 'sceneName', None) for scene in scene_items]
+                    current_scene = getattr(scenes_response, 'current_program_scene_name', None)
+                elif isinstance(scenes_response, dict) and 'scenes' in scenes_response:
+                    scene_items = scenes_response['scenes']
+                    scene_list = [scene['sceneName'] for scene in scene_items]
+                    current_scene = scenes_response.get('current_program_scene_name')
+            
+            return jsonify({
+                'success': True,
+                'scenes': scene_list,
+                'current_scene': current_scene
+            })
+        except Exception as e:
+            # Connection lost
+            dashboard_data.obs_client = None
+            return jsonify({"success": False, "error": f"OBS connection lost: {str(e)}"})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)})
 
 
 def run_flask():

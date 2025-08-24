@@ -53,13 +53,6 @@ def test_all_paths():
         print(f"❌ Failed to import tools.token_utils: {e}")
         return False
     
-    try:
-        from tools.bot_moderation import BotModerationManager
-        print("✅ Successfully imported tools.bot_moderation")
-    except ImportError as e:
-        print(f"❌ Failed to import tools.bot_moderation: {e}")
-        return False
-    
     # Test 6: Test config loading with correct path
     try:
         import json
@@ -108,5 +101,4 @@ if __name__ == "__main__":
     print("│   └── dashboardqa.py") 
     print("└── tools/")
     print("    ├── token_utils.py")
-    print("    ├── bot_moderation.py")
     print("    └── verify_paths.py  <- This script")

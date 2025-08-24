@@ -17,7 +17,6 @@ def final_verification():
         ("../config.json", "Config file"),
         ("../templates", "Templates folder"), 
         ("../tools/token_utils.py", "Token utils"),
-        ("../tools/bot_moderation.py", "Bot moderation"),
         ("zeddybot.py", "Discord bot"),
         ("dashboardqa.py", "Dashboard")
     ]

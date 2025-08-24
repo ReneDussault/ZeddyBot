@@ -26,7 +26,6 @@ def simple_path_test():
         ("../templates", "Templates folder"),
         ("../tools", "Tools folder"),
         ("../tools/token_utils.py", "Token utils module"),
-        ("../tools/bot_moderation.py", "Bot moderation module"),
         ("zeddybot.py", "Discord bot script"),
         ("dashboardqa.py", "Dashboard script")
     ]
@@ -50,12 +49,6 @@ def simple_path_test():
                 print("✅ zeddybot.py has correct tools.token_utils import")
             else:
                 print("❌ zeddybot.py missing tools.token_utils import")
-                all_good = False
-                
-            if "from tools.bot_moderation import" in content:
-                print("✅ zeddybot.py has correct tools.bot_moderation import")
-            else:
-                print("❌ zeddybot.py missing tools.bot_moderation import")
                 all_good = False
                 
             if '"../config.json"' in content:
@@ -119,5 +112,4 @@ if __name__ == "__main__":
     print("│   ├── zeddybot.py")
     print("│   └── dashboardqa.py")
     print("└── tools/               <- Utilities")
-    print("    ├── token_utils.py")
-    print("    └── bot_moderation.py")
+    print("    └── token_utils.py")

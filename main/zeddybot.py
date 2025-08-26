@@ -404,7 +404,7 @@ class DashboardData:
             port = obs_config.get('port', 4455)
             password = obs_config.get('password', '')
         
-        print(f"[{self._log_timestamp()}] [OBS] Attempting to connect to OBS WebSocket at {host}:{port}...")
+        print(f"[{self._log_timestamp()}] [OBS] Attempting to connect to OBS WebSocket")
         
         # Temporarily suppress stderr to hide the obsws-python traceback
         import sys
@@ -437,8 +437,8 @@ class DashboardData:
             sys.stderr = old_stderr
             # Any exception from ReqClient creation or version check
             self.obs_client = None
-            print(f"[{self._log_timestamp()}] [OBS] ⚠️  OBS not running or unreachable at {host}:{port}")
-            print(f"[{self._log_timestamp()}] [OBS] Dashboard will continue without OBS integration (retry in {self.obs_connection_cooldown}s)")
+            print(f"[{self._log_timestamp()}] [OBS] ⚠️  OBS not running or unreachable")
+            print(f"[{self._log_timestamp()}] [OBS] Continue without OBS integration")
 
     def obs_reconnect(self):
         """Retry connecting to OBS - useful when OBS starts after dashboard"""
@@ -1277,7 +1277,7 @@ def run_flask():
 
 if __name__ == "__main__":
     print(f"[{now()}] Starting ZeddyBot...")
-    print(f"[{now()}] HTTP server starting on http://0.0.0.0:5000 (Dashboard + Discord stats API)")
+    print(f"[{now()}] HTTP server starting on http://0.0.0.0:5000")
     
     # Start Flask in a separate thread
     flask_thread = threading.Thread(target=run_flask)

@@ -706,17 +706,61 @@
                         const isNearTop = chatDiv.scrollTop < 60;
                         chatDiv.innerHTML = '';
                         messages.slice().reverse().forEach(msg => {
-                            const msgDiv = document.createElement('div');
-                            msgDiv.className = 'chat-message';
-                            msgDiv.onclick = () => displayQuestion(msg.username, msg.message);
-                            msgDiv.innerHTML = `<span style="color:#ffe066;">[${msg.timestamp}]</span> <strong style="color:#00fff7;">${msg.username}:</strong> <span style="color:#ff61f6;">${msg.message}</span>`;
-                            chatDiv.appendChild(msgDiv);
+                            addMessageToChat(msg);
                         });
                         if (isNearTop) {
                             chatDiv.scrollTop = 0;
                         }
                     })
                     .catch(err => console.error('Chat update error:', err));
+            }
+
+            function addMessageToChat(msg) {
+                const chatDiv = document.getElementById('chat-messages');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'chat-message';
+                msgDiv.onclick = () => displayQuestion(msg.username, msg.message);
+                msgDiv.innerHTML = `<span style="color:#ffe066;">[${msg.timestamp}]</span> <strong style="color:#00fff7;">${msg.username}:</strong> <span style="color:#ff61f6;">${msg.message}</span>`;
+                
+                // Insert at the top (most recent first)
+                chatDiv.insertBefore(msgDiv, chatDiv.firstChild);
+                
+                // Limit to last 50 messages to prevent memory issues
+                while (chatDiv.children.length > 50) {
+                    chatDiv.removeChild(chatDiv.lastChild);
+                }
+            }
+
+            // Initialize real-time chat with Server-Sent Events
+            function initRealTimeChat() {
+                const eventSource = new EventSource('/api/chat/stream');
+                
+                eventSource.onmessage = function(event) {
+                    try {
+                        const messageData = JSON.parse(event.data);
+                        
+                        if (messageData.type === 'heartbeat') {
+                            return; // Ignore heartbeat messages
+                        }
+                        
+                        // Add new message to chat immediately
+                        addMessageToChat(messageData);
+                        console.log('[CHAT] Real-time message received:', messageData.username + ': ' + messageData.message);
+                        
+                    } catch (error) {
+                        console.error('[CHAT] Error parsing SSE message:', error);
+                    }
+                };
+                
+                eventSource.onerror = function(event) {
+                    console.log('[CHAT] SSE connection error, will auto-reconnect');
+                };
+                
+                eventSource.onopen = function(event) {
+                    console.log('[CHAT] Real-time chat connected');
+                };
+                
+                return eventSource;
             }
 
             // Q&A functions
@@ -813,10 +857,26 @@
                 }
             }
 
-            setInterval(updateChat, 10000);  // Reduced from 2000ms to 10000ms (10 seconds)
-            setInterval(refreshQuestion, 15000);  // Reduced from 5000ms to 15000ms (15 seconds)
+            // Initialize real-time chat instead of polling
+            let chatEventSource;
+            
+            setInterval(refreshQuestion, 15000);  // Keep Q&A refresh interval
+            
+            // Load initial chat history
             updateChat();
+            
+            // Start real-time chat updates
+            chatEventSource = initRealTimeChat();
+            
             refreshQuestion();
+            
+            // Clean up SSE connection when page is unloaded
+            window.addEventListener('beforeunload', function() {
+                if (chatEventSource) {
+                    chatEventSource.close();
+                    console.log('[CHAT] SSE connection closed');
+                }
+            });
 
             // Dashboard data and chat send
             async function loadData() {

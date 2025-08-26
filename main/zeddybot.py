@@ -9,7 +9,7 @@ from discord.ext.tasks import loop
 import socket
 import asyncio
 import logging
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response
 from flask_cors import CORS
 import threading
 import sys
@@ -18,6 +18,9 @@ import time
 import select
 from collections import deque
 from typing import Optional
+import urllib.parse
+import io
+import queue
 
 # Add parent directory to path to import from tools
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -154,7 +157,7 @@ class TwitchAPI:
             # Message already printed by refresh_twitch_bot_token utility
             return True
         else:
-            print(message)
+            print(f"[{now()}] [TWITCH] {message}")
             return False
 
     def get_users(self, login_names):
@@ -208,14 +211,12 @@ class TwitchChatBot:
             # Wait for successful connection
             response = self.socket.recv(2048).decode('utf-8')
             if "Welcome, GLHF!" in response or "End of /NAMES list" in response:
-                message = "ZeddyBot connected!"
+                message = "Operational status: Online."
                 self.connected = True
                 self.socket.settimeout(None)  # Remove timeout for normal operation
                 print(f"[{now()}] [TWITCH] Connected to chat as {self.config.twitch_bot_username}")
                 print(f"[{now()}] [TWITCH] Sending to chat: {message}")
                 self.send_message(message)
-                print(f"[{now()}] [TWITCH] Message sent to chat!")
-
                 return True
             else:
                 print(f"[{now()}] [TWITCH] Unexpected response during connection: {response}")
@@ -276,12 +277,17 @@ class TwitchChatBot:
                 self.socket.send(message_to_send.encode('utf-8'))
                 
                 # Add sent message to chat display (since Twitch doesn't echo it back)
+                message_data = {
+                    'username': self.config.twitch_bot_username,
+                    'message': message,
+                    'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+                }
+                
                 if self.dashboard_data is not None:
-                    self.dashboard_data.chat_messages.append({
-                        'username': self.config.twitch_bot_username,
-                        'message': message,
-                        'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-                    })
+                    self.dashboard_data.chat_messages.append(message_data)
+                
+                # Broadcast bot messages to SSE clients too
+                broadcast_chat_message(message_data)
             
             return True
             
@@ -297,6 +303,17 @@ class TwitchChatBot:
                         message_to_send = f"PRIVMSG {self.channel} :{message}\r\n"
                         self.socket.send(message_to_send.encode('utf-8'))
                         print(f"[{now()}] [TWITCH] Message sent after reconnection: {message}")
+                        
+                        # Also broadcast reconnection message to SSE clients
+                        message_data = {
+                            'username': self.config.twitch_bot_username,
+                            'message': message,
+                            'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+                        }
+                        if self.dashboard_data is not None:
+                            self.dashboard_data.chat_messages.append(message_data)
+                        broadcast_chat_message(message_data)
+                        
                         return True
                     else:
                         return False
@@ -467,13 +484,26 @@ class DashboardData:
                     if len(parts) >= 3:
                         user_part = parts[1].split('!')[0]
                         message = parts[2]
-                        self.chat_messages.append({
+                        if user_part == "zeddy_bot" and message == "Operational status: Online.":
+                            print(f"[{now()}] [TWITCH] ZeddyBot connected to Twitch chat") 
+                        
+                        # Create message data
+                        message_data = {
                             'username': user_part,
                             'message': message,
                             'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-                        })
+                        }
+                        
+                        # Add to local storage
+                        self.chat_messages.append(message_data)
+                        
+                        # Broadcast to connected SSE clients in real-time (only for non-bot messages)
+                        if user_part != "zeddy_bot":  # Avoid logging bot messages
+                            print(f"[{now()}] [TWITCH] Chat message received: {user_part}: {message}")
+                            broadcast_chat_message(message_data)
+                            
                 except Exception as e:
-                    print(f"[{self._log_timestamp()}] Error parsing message: {e}")
+                    print(f"[{self._log_timestamp()}] [TWITCH] Error parsing message: {e}")
             elif 'PING' in line:
                 if self.chat_sock:
                     self.chat_sock.send("PONG :tmi.twitch.tv\r\n".encode('utf-8'))
@@ -501,7 +531,7 @@ class DashboardData:
             response = sock.recv(1024).decode('utf-8', errors='ignore')
             # Only print non-verbose IRC messages for debugging
             if not any(code in response for code in ["001", "002", "003", "004", "375", "372", "376"]):
-                print(f"[CHAT_TEST] IRC Response: {response}")  # Debug output
+                print(f"[{now()}] [TWITCH] IRC Response: {response}")  # Debug output
             sock.close()
             
             if ":tmi.twitch.tv 001" in response:  # Welcome message indicates success
@@ -511,7 +541,7 @@ class DashboardData:
                     return True, "Chat connection test successful (anonymous - read only)"
             elif "Login authentication failed" in response or ":tmi.twitch.tv NOTICE * :Login authentication failed" in response:
                 # Try to automatically refresh the token
-                print(f"[{self._log_timestamp()}] [CHAT_TEST] Authentication failed, attempting automatic token refresh...")
+                print(f"[{now()}] [TWITCH] Authentication failed, attempting automatic token refresh...")
                 success, refresh_msg, new_token = refresh_twitch_bot_token("config.json")
                 if success:
                     self.load_config()  # Reload config with new token
@@ -539,7 +569,7 @@ class DashboardData:
     def connect_obs(self, host="10.0.0.228", port=4455, password=None):
         """Connect to OBS WebSocket v5 using ReqClient - gracefully handle OBS being offline"""
         if ReqClient is None:
-            print(f"[{self._log_timestamp()}] [OBS] obsws-python not installed - OBS features disabled")
+            print(f"[{now()}] [OBS] obsws-python not installed - OBS features disabled")
             self.obs_client = None
             return
 
@@ -557,7 +587,7 @@ class DashboardData:
             port = obs_config.get('port', 4455)
             password = obs_config.get('password', '')
         
-        print(f"[{self._log_timestamp()}] [OBS] Attempting to connect to OBS WebSocket")
+        print(f"[{now()}] [OBS] Attempting to connect to OBS WebSocket")
         
         # Temporarily suppress stderr to hide the obsws-python traceback
         import sys
@@ -582,7 +612,7 @@ class DashboardData:
             
             # Restore stderr and print success
             sys.stderr = old_stderr
-            print(f"[{self._log_timestamp()}] [OBS] ✅ Connected to OBS successfully at {host}:{port}")
+            print(f"[{now()}] [OBS] ✅ Connected to OBS successfully at {host}:{port}")
             return
             
         except Exception:
@@ -590,8 +620,8 @@ class DashboardData:
             sys.stderr = old_stderr
             # Any exception from ReqClient creation or version check
             self.obs_client = None
-            print(f"[{self._log_timestamp()}] [OBS] ⚠️  OBS not running or unreachable")
-            print(f"[{self._log_timestamp()}] [OBS] Continue without OBS integration")
+            print(f"[{now()}] [OBS] ⚠️  OBS not running or unreachable")
+            print(f"[{now()}] [OBS] Continue without OBS integration")
 
     def obs_reconnect(self):
         """Retry connecting to OBS - useful when OBS starts after dashboard"""
@@ -599,10 +629,10 @@ class DashboardData:
         current_time = time.time()
         if current_time - self.last_obs_attempt < self.obs_connection_cooldown:
             time_remaining = int(self.obs_connection_cooldown - (current_time - self.last_obs_attempt))
-            print(f"[{self._log_timestamp()}] [OBS] Connection attempt too recent, retry in {time_remaining}s")
+            print(f"[{now()}] [OBS] Connection attempt too recent, retry in {time_remaining}s")
             return False
-            
-        print(f"[{self._log_timestamp()}] [OBS] Manual reconnection attempt...")
+
+        print(f"[{now()}] [OBS] Manual reconnection attempt...")
         self.connect_obs()
         return self.obs_client is not None
 
@@ -628,7 +658,7 @@ class DashboardData:
                 )
                 return True, "Question displayed on stream via browser source"
             except Exception as scene_error:
-                print(f"[{self._log_timestamp()}] [OBS] Scene item ID 73 not found: {scene_error}")
+                print(f"[{now()}] [OBS] Scene item ID 73 not found: {scene_error}")
                 return False, f"Failed to show Q&A scene: {scene_error}"
 
         except Exception as e:
@@ -652,7 +682,7 @@ class DashboardData:
                 )
                 return True, "Question hidden from stream"
             except Exception as scene_error:
-                print(f"[{self._log_timestamp()}] [OBS] Scene item ID 73 not found: {scene_error}")
+                print(f"[{now()}] [OBS] Scene item ID 73 not found: {scene_error}")
                 return False, f"Failed to hide Q&A scene: {scene_error}"
 
         except Exception as e:
@@ -682,14 +712,14 @@ class DashboardData:
             )
             
             if user_response.status_code != 200:
-                print(f"[{self._log_timestamp()}] Failed to get user info: {user_response.status_code}")
+                print(f"[{now()}] [TWITCH] Failed to get user info: {user_response.status_code}")
                 self.cached_stream_status = None
                 self.last_stream_check = current_time
                 return None
                 
             user_data = user_response.json()["data"]
             if not user_data:
-                print(f"[{self._log_timestamp()}] No user data found for channel: {self.config.get('target_channel', '')}")
+                print(f"[{now()}] [TWITCH] No user data found for channel: {self.config.get('target_channel', '')}")
                 self.cached_stream_status = None
                 self.last_stream_check = current_time
                 return None
@@ -714,21 +744,21 @@ class DashboardData:
                 
                 return stream_data
             else:
-                print(f"[{self._log_timestamp()}] Failed to get stream info: {stream_response.status_code}")
+                print(f"[{now()}] [TWITCH] Failed to get stream info: {stream_response.status_code}")
                 self.cached_stream_status = None
                 self.last_stream_check = current_time
                 return None
                 
         except requests.exceptions.Timeout:
-            print(f"[{self._log_timestamp()}] Twitch API timeout")
+            print(f"[{now()}] [TWITCH] API timeout")
             # Return cached data if available, otherwise None
             return self.cached_stream_status
         except requests.exceptions.RequestException as e:
-            print(f"[{self._log_timestamp()}] Twitch API request error: {e}")
+            print(f"[{now()}] [TWITCH] API request error: {e}")
             # Return cached data if available, otherwise None
             return self.cached_stream_status
         except Exception as e:
-            print(f"[{self._log_timestamp()}] Error getting stream status: {e}")
+            print(f"[{now()}] [TWITCH] Error getting stream status: {e}")
             # Don't update cache on unexpected errors, return existing cache if available
             return self.cached_stream_status
 
@@ -776,7 +806,7 @@ class ZeddyBot(commands.Bot):
 
     def log_once(self, message):
         if getattr(self, "_last_log_line", None) != message:
-            print(message)
+            print(f"[{now()}] [ZEDDYBOT] {message}")
             self._last_log_line = message
 
     def setup(self):
@@ -935,8 +965,8 @@ class ZeddyBot(commands.Bot):
 
         @self.event
         async def on_member_join(self, member):
-            print(f"[{now()}] {member} has joined the server")
-            
+            print(f"[{now()}] [DISCORD] {member} has joined the server")
+
             # drifters role - convert to int and validate
             drifters_role = member.guild.get_role(int(self.DRIFTERS_ROLE_ID))
             if drifters_role:
@@ -944,20 +974,20 @@ class ZeddyBot(commands.Bot):
                 
                 if not has_drifter_role:
                     await member.add_roles(drifters_role)
-                    print(f"[{now()}] Added Drifters role to {member}")
-                    
+                    print(f"[{now()}] [DISCORD] Added Drifters role to {member}")
+
                     # role upgrade after 30 days
                     self.loop.create_task(self._upgrade_role_after_delay(member))
             else:
-                print(f"[{now()}] ERROR: Drifters role with ID {self.DRIFTERS_ROLE_ID} not found!")
+                print(f"[{now()}] [DISCORD] ERROR: Drifters role with ID {self.DRIFTERS_ROLE_ID} not found!")
             
             # Update Discord stats in real-time
             await self.update_discord_stats()
 
         @self.event
         async def on_member_remove(self, member):
-            print(f"[{now()}] {member} has left the server")
-            
+            print(f"[{now()}] [DISCORD] {member} has left the server")
+
             # Update Discord stats in real-time
             await self.update_discord_stats()
 
@@ -988,7 +1018,7 @@ class ZeddyBot(commands.Bot):
             print(f"[{now()}] [DISCORD] Discord stats updated: {human_members} humans, {online_members} online")
             
         except Exception as e:
-            print(f"[{now()}] Error updating Discord stats: {e}")
+            print(f"[{now()}] [DISCORD] Error updating Discord stats: {e}")
 
     async def log_activity_changes(self, before, after):
         before_activities = set((a.type, getattr(a, 'name', None)) for a in before.activities)
@@ -998,14 +1028,14 @@ class ZeddyBot(commands.Bot):
         stopped = before_activities - after_activities
 
         for act_type, act_name in started:
-            self.log_once(f"[{now()}] User '{after.name}' started activity: {act_type.name} ({act_name})")
+            self.log_once(f"[{now()}] [DISCORD] User '{after.name}' started activity: {act_type.name} ({act_name})")
         for act_type, act_name in stopped:
-            self.log_once(f"[{now()}] User '{after.name}' stopped activity: {act_type.name} ({act_name})")
+            self.log_once(f"[{now()}] [DISCORD] User '{after.name}' stopped activity: {act_type.name} ({act_name})")
 
         if before.status == discord.Status.offline and after.status != discord.Status.offline:
-            self.log_once(f"[{now()}] User '{after.name}' has come online.")
+            self.log_once(f"[{now()}] [DISCORD] User '{after.name}' has come online.")
         elif before.status != discord.Status.offline and after.status == discord.Status.offline:
-            self.log_once(f"[{now()}] User '{after.name}' has gone offline.")
+            self.log_once(f"[{now()}] [DISCORD] User '{after.name}' has gone offline.")
 
         
     async def _handle_live_role_update(self, before, after):
@@ -1013,8 +1043,8 @@ class ZeddyBot(commands.Bot):
         has_live_role = int(self.LIVE_ROLE_ID) in after._roles
 
         if is_streaming and not has_live_role:
-            print(f"[{now()}] Giving LIVE role to {after.name}")
-            
+            print(f"[{now()}] [DISCORD] Giving LIVE role to {after.name}")
+
             # Convert to int and validate role exists
             live_role = after.guild.get_role(int(self.LIVE_ROLE_ID))
             if live_role:
@@ -1024,11 +1054,11 @@ class ZeddyBot(commands.Bot):
                 if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
                     self.twitch_chat_bot.send_message(f"Discord status updated to streaming! Welcome everyone!")
             else:
-                print(f"[{now()}] ERROR: Live role with ID {self.LIVE_ROLE_ID} not found!")
+                print(f"[{now()}] [DISCORD] ERROR: Live role with ID {self.LIVE_ROLE_ID} not found!")
 
         elif not is_streaming and has_live_role:
-            print(f"[{now()}] Removing LIVE role from {after.name}")
-            
+            print(f"[{now()}] [DISCORD] Removing LIVE role from {after.name}")
+
             # Convert to int and validate role exists
             live_role = after.guild.get_role(int(self.LIVE_ROLE_ID))
             if live_role:
@@ -1038,7 +1068,7 @@ class ZeddyBot(commands.Bot):
                 if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
                     self.twitch_chat_bot.send_message("Stream appears to be ending. Thanks for watching!")
             else:
-                print(f"[{now()}] ERROR: Live role with ID {self.LIVE_ROLE_ID} not found!")
+                print(f"[{now()}] [DISCORD] ERROR: Live role with ID {self.LIVE_ROLE_ID} not found!")
 
 
     async def _upgrade_role_after_delay(self, member, days=30):
@@ -1059,9 +1089,9 @@ class ZeddyBot(commands.Bot):
             if not has_outlaw_role:
                 await updated_member.add_roles(outlaws_role)
                 await updated_member.remove_roles(drifters_role)
-                print(f"[{now()}] Upgraded {updated_member.name} to Outlaws after {days} days")
+                print(f"[{now()}] [DISCORD] Upgraded {updated_member.name} to Outlaws after {days} days")
         else:
-            print(f"[{now()}] ERROR: Required roles not found - Outlaws: {self.OUTLAWS_ROLE_ID}, Drifters: {self.DRIFTERS_ROLE_ID}")
+            print(f"[{now()}] [DISCORD] ERROR: Required roles not found - Outlaws: {self.OUTLAWS_ROLE_ID}, Drifters: {self.DRIFTERS_ROLE_ID}")
 
     @loop(hours=24 * 5)
     async def update_token_task(self):
@@ -1083,11 +1113,11 @@ class ZeddyBot(commands.Bot):
     async def check_twitch_ping(self):
         # Check if chat bot is connected, reconnect if needed
         if not self.twitch_chat_bot.is_connected():
-            print(f"[{now()}] Twitch chat bot disconnected, attempting reconnection...")
+            print(f"[{now()}] [TWITCH] Twitch chat bot disconnected, attempting reconnection...")
             if self.twitch_chat_bot.connect():
-                print(f"[{now()}] Twitch chat bot reconnected successfully")
+                print(f"[{now()}] [TWITCH] Twitch chat bot reconnected successfully")
             else:
-                print(f"[{now()}] Failed to reconnect Twitch chat bot")
+                print(f"[{now()}] [TWITCH] Failed to reconnect Twitch chat bot")
         else:
             self.twitch_chat_bot.check_for_ping()
 
@@ -1095,12 +1125,12 @@ class ZeddyBot(commands.Bot):
     @loop(seconds=60)
     async def check_twitch_online_streamers(self):
         if not self.CHANNEL_ID:
-            print(f"[{now()}] Discord channel ID not configured")
+            print(f"[{now()}] [DISCORD] Discord channel ID not configured")
             return
             
         channel = self.get_channel(self.CHANNEL_ID)
         if not channel:
-            print(f"[{now()}] Could not find Discord channel with ID {self.CHANNEL_ID}")
+            print(f"[{now()}] [DISCORD] Could not find Discord channel with ID {self.CHANNEL_ID}")
             return
 
         notifications = self.notification_manager.get_notifications()
@@ -1110,7 +1140,7 @@ class ZeddyBot(commands.Bot):
 
     async def _send_stream_notification(self, channel, notification):
 
-        print(f"[{now()}] Sending discord notification ")
+        print(f"[{now()}] [DISCORD] Sending discord notification ")
 
         embed = discord.Embed(
             title=f"{notification['user_name']} is live on Twitch",
@@ -1133,7 +1163,7 @@ class ZeddyBot(commands.Bot):
                 encoded_game = urllib.parse.quote(notification['game_name'])
                 embed.set_thumbnail(url=f"https://avatar-resolver.vercel.app/twitch-boxart/{encoded_game}")
             except Exception as e:
-                print(f"[{now()}] Warning: Could not set thumbnail for game {notification.get('game_name')}: {e}")
+                print(f"[{now()}] [DISCORD] Warning: Could not set thumbnail for game {notification.get('game_name')}: {e}")
 
         embed.add_field(
             name="",
@@ -1152,12 +1182,12 @@ class ZeddyBot(commands.Bot):
     async def send_stream_notification(self, stream_info):
         """Public method for sending stream notifications (used by Flask routes)"""
         if not self.CHANNEL_ID:
-            print(f"[{now()}] No Discord channel configured")
+            print(f"[{now()}] [DISCORD] No Discord channel configured")
             return
             
         channel = self.get_channel(self.CHANNEL_ID)
         if not channel:
-            print(f"[{now()}] Could not find Discord channel with ID {self.CHANNEL_ID}")
+            print(f"[{now()}] [DISCORD] Could not find Discord channel with ID {self.CHANNEL_ID}")
             return
         
         # Convert stream_info format to notification format expected by _send_stream_notification
@@ -1177,6 +1207,7 @@ config = None
 dashboard_data = None
 bot = None
 
+
 def create_flask_app():
     """Create and configure Flask app"""
     flask_app = Flask(__name__, template_folder='../templates')
@@ -1186,6 +1217,29 @@ def create_flask_app():
 # Create Flask app
 app = create_flask_app()
 
+# Global list to track Server-Sent Events clients for real-time chat updates
+chat_sse_clients = []
+
+def broadcast_chat_message(message_data):
+    """Broadcast new chat message to all connected SSE clients"""
+    if not chat_sse_clients:
+        return
+        
+    # Format as SSE data
+    sse_data = f"data: {json.dumps(message_data)}\n\n"
+    
+    # Send to all connected clients (remove disconnected ones)
+    clients_to_remove = []
+    for client_queue in chat_sse_clients:
+        try:
+            client_queue.put(sse_data)
+        except:
+            clients_to_remove.append(client_queue)
+    
+    # Clean up disconnected clients
+    for client in clients_to_remove:
+        chat_sse_clients.remove(client)
+
 # Connect to OBS on startup will be called manually during startup
 
 # Flask Routes
@@ -1193,9 +1247,11 @@ app = create_flask_app()
 def dashboard():
     return render_template('dashboardqa.html')
 
+
 @app.route('/qna')
 def qna_display():
     return render_template('qna_display.html')
+
 
 @app.route('/api/status')
 def api_status():
@@ -1230,12 +1286,12 @@ def api_status():
     })
 
 
-
 @app.route('/api/history')
 def get_history():
     if not dashboard_data:
         return jsonify([])
     return jsonify(dashboard_data.stream_history)
+
 
 @app.route('/api/send_chat', methods=['POST'])
 def send_chat():
@@ -1250,6 +1306,7 @@ def send_chat():
             return jsonify({'success': False, 'error': 'No message provided'}), 400
         
         if bot.twitch_chat_bot.send_message(message):
+            print(f"[{now()}] [TWITCH] Chat message sent: {message}")
             return jsonify({'success': True})
         else:
             return jsonify({'success': False, 'error': 'Failed to send message'}), 500
@@ -1392,6 +1449,33 @@ def test_chat():
     else:
         return jsonify({'success': False, 'error': message}), 500
 
+@app.route('/api/chat/stream')
+def chat_stream():
+    """Server-Sent Events endpoint for real-time chat updates"""
+    def event_stream():
+        client_queue = queue.Queue()
+        chat_sse_clients.append(client_queue)
+        
+        try:
+            while True:
+                try:
+                    # Wait for new message with timeout
+                    message = client_queue.get(timeout=30)
+                    yield message
+                except queue.Empty:
+                    # Send heartbeat to keep connection alive
+                    yield "data: {\"type\": \"heartbeat\"}\n\n"
+        except GeneratorExit:
+            # Client disconnected
+            if client_queue in chat_sse_clients:
+                chat_sse_clients.remove(client_queue)
+
+    return Response(event_stream(), mimetype='text/event-stream',
+                   headers={'Cache-Control': 'no-cache',
+                           'Connection': 'keep-alive',
+                           'Access-Control-Allow-Origin': '*',
+                           'Access-Control-Allow-Headers': 'Cache-Control'})
+
 @app.route('/api/refresh_token', methods=['POST'])
 def refresh_token():
     try:
@@ -1448,7 +1532,7 @@ def toggle_obs_item():
             return jsonify({'success': True})
         except Exception as scene_error:
             if "scene item ID 73 not found" in str(scene_error):
-                print(f"[{dashboard_data._log_timestamp()}] [OBS] Scene item ID 73 not found: {scene_error}")
+                print(f"[{now()}] [OBS] Scene item ID 73 not found: {scene_error}")
                 return jsonify({'error': 'Scene item not found - may have been deleted or recreated in OBS'}), 404
             else:
                 raise scene_error

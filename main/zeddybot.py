@@ -211,21 +211,21 @@ class TwitchChatBot:
                 message = "ZeddyBot connected!"
                 self.connected = True
                 self.socket.settimeout(None)  # Remove timeout for normal operation
-                print(f"[{now()}] Connected to Twitch chat as {self.config.twitch_bot_username}")
-                print(f"[{now()}] Sending to Twitch chat: {message}")
+                print(f"[{now()}] [TWITCH] Connected to chat as {self.config.twitch_bot_username}")
+                print(f"[{now()}] [TWITCH] Sending to chat: {message}")
                 self.send_message(message)
-                print(f"[{now()}] Message sent to Twitch chat!")
+                print(f"[{now()}] [TWITCH] Message sent to chat!")
 
                 return True
             else:
-                print(f"[{now()}] Unexpected response during connection: {response}")
+                print(f"[{now()}] [TWITCH] Unexpected response during connection: {response}")
                 return False
                 
         except socket.timeout:
-            print(f"[{now()}] Timeout connecting to Twitch chat")
+            print(f"[{now()}] [TWITCH] Timeout connecting to chat")
             return False
         except Exception as e:
-            print(f"[{now()}] Error connecting to Twitch chat: {e}")
+            print(f"[{now()}] [TWITCH] Error connecting to chat: {e}")
             return False
 
     def is_connected(self):
@@ -238,7 +238,7 @@ class TwitchChatBot:
             self.socket.send("PING :tmi.twitch.tv\r\n".encode('utf-8'))
             return True
         except (BrokenPipeError, socket.error, OSError) as e:
-            print(f"[{now()}] Connection test failed, marking as disconnected")
+            print(f"[{now()}] [TWITCH] Connection test failed, marking as disconnected")
             self.connected = False
             return False
 
@@ -253,16 +253,16 @@ class TwitchChatBot:
                     self.socket.close()
                 except:
                     pass
-            print(f"[{now()}] Error disconnecting from Twitch chat: {e}")
+            print(f"[{now()}] [TWITCH] Error disconnecting from chat: {e}")
         finally:
             self.connected = False
             self.socket = None
 
     def send_message(self, message):
         if not self.connected:
-            print(f"[{now()}] Twitch chat not connected, attempting to connect...")
+            print(f"[{now()}] [TWITCH] Chat not connected, attempting to connect...")
             if not self.connect():
-                print(f"[{now()}] Failed to connect to Twitch chat")
+                print(f"[{now()}] [TWITCH] Failed to connect to chat")
                 return False
 
         try:
@@ -286,29 +286,29 @@ class TwitchChatBot:
             return True
             
         except (BrokenPipeError, socket.error, OSError) as e:
-            print(f"[{now()}] Twitch chat connection error ({e}), marking as disconnected")
+            print(f"[{now()}] [TWITCH] Chat connection error ({e}), marking as disconnected")
             self.connected = False
             
             # Try to reconnect and resend once
-            print(f"[{now()}] Attempting to reconnect and resend message...")
+            print(f"[{now()}] [TWITCH] Attempting to reconnect and resend message...")
             if self.connect():
                 try:
                     if self.socket is not None:
                         message_to_send = f"PRIVMSG {self.channel} :{message}\r\n"
                         self.socket.send(message_to_send.encode('utf-8'))
-                        print(f"[{now()}] Message sent after reconnection: {message}")
+                        print(f"[{now()}] [TWITCH] Message sent after reconnection: {message}")
                         return True
                     else:
                         return False
                 except Exception as retry_e:
-                    print(f"[{now()}] Failed to send message after reconnection: {retry_e}")
+                    print(f"[{now()}] [TWITCH] Failed to send message after reconnection: {retry_e}")
                     return False
             else:
-                print(f"[{now()}] Failed to reconnect to Twitch chat")
+                print(f"[{now()}] [TWITCH] Failed to reconnect to chat")
                 return False
                 
         except Exception as e:
-            print(f"[{now()}] Unexpected error sending message to Twitch chat: {e}")
+            print(f"[{now()}] [TWITCH] Unexpected error sending message to chat: {e}")
             return False
 
     def listen_for_chat(self):
@@ -335,7 +335,7 @@ class TwitchChatBot:
                     
         except Exception as e:
             if "timed out" not in str(e).lower():
-                print(f"[{now()}] Twitch chat connection lost during ping check: {e}")
+                print(f"[{now()}] [TWITCH] Chat connection lost during ping check: {e}")
                 self.connected = False
         finally:
             # Reset to blocking mode
@@ -361,7 +361,7 @@ class TwitchChatBot:
             self.connected = False
         except Exception as e:
             if "timed out" not in str(e).lower():
-                print(f"[{now()}] Error in check_for_ping: {e}")
+                print(f"[{now()}] [TWITCH] Error in check_for_ping: {e}")
 
 
 class StreamNotificationManager:
@@ -430,7 +430,7 @@ class DashboardData:
                             data = self.chat_sock.recv(1024).decode('utf-8', errors='ignore')
                             self.parse_chat_messages(data)
                 except Exception as e:
-                    print(f"[{self._log_timestamp()}] Chat reader error: {e}")
+                    print(f"[{now()}] [TWITCH] Chat reader error: {e}")
                     time.sleep(5)
         chat_thread = threading.Thread(target=chat_reader, daemon=True)
         chat_thread.start()
@@ -452,9 +452,9 @@ class DashboardData:
                 self.chat_sock.send(f"NICK justinfan12345\r\n".encode('utf-8'))
             
             self.chat_sock.send(f"JOIN #{self.config.get('target_channel', '')}\r\n".encode('utf-8'))
-            print(f"[{self._log_timestamp()}] Connected to chat: #{self.config.get('target_channel', '')}")
+            print(f"[{now()}] [TWITCH] ✓ Chat connected: #{self.config.get('target_channel', '')}")
         except Exception as e:
-            print(f"[{self._log_timestamp()}] Failed to connect to chat: {e}")
+            print(f"[{now()}] [TWITCH] Failed to connect to chat: {e}")
             self.chat_sock = None
 
     def parse_chat_messages(self, data):
@@ -552,7 +552,7 @@ class DashboardData:
         
         # Use config values if not provided
         if host == "10.0.0.228":  # Default value
-            obs_config = dashboard_data.config.get('obs', {})
+            obs_config = self.config.get('obs', {})
             host = obs_config.get('host', 'localhost')
             port = obs_config.get('port', 4455)
             password = obs_config.get('password', '')
@@ -900,7 +900,7 @@ class ZeddyBot(commands.Bot):
         @self.event
         async def on_ready():
 
-            print(f"[{now()}] ZeddyBot is connected to Discord ")
+            print(f"[{now()}] [DISCORD] ✓ ZeddyBot connected to Discord")
             
             # Initialize Discord stats cache
             await self.update_discord_stats()
@@ -1200,6 +1200,9 @@ def qna_display():
 @app.route('/api/status')
 def api_status():
     """Get comprehensive status information in the format expected by the dashboard"""
+    if not dashboard_data:
+        return jsonify({"success": False, "error": "Dashboard not initialized"}), 500
+        
     stream_status = dashboard_data.get_twitch_stream_status()
     
     # Fallback data if stream status fails
@@ -1230,11 +1233,16 @@ def api_status():
 
 @app.route('/api/history')
 def get_history():
+    if not dashboard_data:
+        return jsonify([])
     return jsonify(dashboard_data.stream_history)
 
 @app.route('/api/send_chat', methods=['POST'])
 def send_chat():
     try:
+        if not bot:
+            return jsonify({'success': False, 'error': 'Bot not initialized'}), 500
+            
         data = request.get_json()
         message = data.get('message', '')
         
@@ -1251,6 +1259,8 @@ def send_chat():
 
 @app.route('/api/quick_messages', methods=['GET'])
 def get_quick_messages():
+    if not dashboard_data:
+        return jsonify([])
     quick_messages = dashboard_data.config.get('quick_messages', [
         "Thanks for watching!",
         "Don't forget to follow!",
@@ -1264,6 +1274,9 @@ def get_quick_messages():
 @app.route('/api/quick_messages', methods=['POST'])
 def send_quick_message():
     try:
+        if not bot or not dashboard_data:
+            return jsonify({'success': False, 'error': 'Components not initialized'}), 500
+            
         data = request.get_json()
         message_index = data.get('index')
         message_type = data.get('type')
@@ -1298,6 +1311,8 @@ def send_quick_message():
 
 @app.route('/api/chat')
 def get_chat():
+    if not dashboard_data:
+        return jsonify([])
     return jsonify(list(dashboard_data.chat_messages))
 
 @app.route('/api/discord_stats', methods=['GET'])
@@ -1353,6 +1368,9 @@ def get_discord_stats():
 @app.route('/api/test_chat_messages', methods=['POST'])
 def add_test_chat_messages():
     """Add some test messages to verify chat display is working"""
+    if not dashboard_data:
+        return jsonify({'success': False, 'error': 'Dashboard not initialized'}), 500
+        
     test_messages = [
         {'username': 'TestUser1', 'message': 'Hello world!', 'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')},
         {'username': 'TestUser2', 'message': 'How is everyone doing?', 'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')},
@@ -1366,6 +1384,8 @@ def add_test_chat_messages():
 
 @app.route('/api/test_chat', methods=['GET'])
 def test_chat():
+    if not dashboard_data:
+        return jsonify({'success': False, 'error': 'Dashboard not initialized'}), 500
     success, message = dashboard_data.test_chat_connection()
     if success:
         return jsonify({'success': True, 'message': message})
@@ -1375,6 +1395,9 @@ def test_chat():
 @app.route('/api/refresh_token', methods=['POST'])
 def refresh_token():
     try:
+        if not dashboard_data:
+            return jsonify({'success': False, 'error': 'Dashboard not initialized'}), 500
+            
         success, message, new_token = refresh_twitch_bot_token("config.json")
         if success:
             # Reload config to get updated token
@@ -1387,7 +1410,7 @@ def refresh_token():
 
 @app.route('/api/obs_scene_items/<scene_name>')
 def get_obs_scene_items(scene_name):
-    if not dashboard_data.obs_client:
+    if not dashboard_data or not dashboard_data.obs_client:
         return jsonify({'error': 'OBS not connected'}), 503
     
     try:
@@ -1408,7 +1431,7 @@ def get_obs_scene_items(scene_name):
 
 @app.route('/api/obs_toggle_item', methods=['POST'])
 def toggle_obs_item():
-    if not dashboard_data.obs_client:
+    if not dashboard_data or not dashboard_data.obs_client:
         return jsonify({'error': 'OBS not connected'}), 503
     
     try:
@@ -1435,6 +1458,8 @@ def toggle_obs_item():
 
 @app.route('/api/ping', methods=['GET'])
 def ping():
+    if not dashboard_data:
+        return jsonify({'status': 'error', 'error': 'Dashboard not initialized'}), 500
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
@@ -1445,6 +1470,8 @@ def ping():
 @app.route('/api/obs_reconnect', methods=['POST'])
 def obs_reconnect():
     try:
+        if not dashboard_data:
+            return jsonify({'success': False, 'error': 'Dashboard not initialized'}), 500
         success = dashboard_data.obs_reconnect()
         if success:
             return jsonify({'success': True, 'message': 'OBS reconnected successfully'})
@@ -1457,6 +1484,8 @@ def obs_reconnect():
 def obs_status():
     """Get OBS connection status without attempting reconnection"""
     try:
+        if not dashboard_data:
+            return jsonify({"success": False, "connected": False, "message": "Dashboard not initialized"})
         if dashboard_data.obs_client:
             # Quick test to see if connection is still valid
             try:
@@ -1521,6 +1550,8 @@ def obs_status():
 @app.route('/api/display_question', methods=['POST'])
 def display_question():
     try:
+        if not dashboard_data:
+            return jsonify({"success": False, "error": "Dashboard not initialized"})
         data = request.get_json()
         if not data:
             return jsonify({"success": False, "error": "No JSON data provided"})
@@ -1541,6 +1572,8 @@ def display_question():
 @app.route('/api/hide_question', methods=['POST'])
 def hide_question():
     try:
+        if not dashboard_data:
+            return jsonify({"success": False, "error": "Dashboard not initialized"})
         # Use the OBS browser source method
         ok, msg = dashboard_data.hide_question_on_obs()
         return jsonify({"success": ok, "message": msg})
@@ -1550,6 +1583,8 @@ def hide_question():
 @app.route('/api/current_question')
 def get_current_question():
     try:
+        if not dashboard_data:
+            return jsonify({"question": {}, "theme": "default"})
         # Include the current theme with the question data
         question_data = dashboard_data.current_question.copy() if dashboard_data.current_question else {}
         question_data['theme'] = getattr(dashboard_data, 'qna_theme', 'dark')
@@ -1560,6 +1595,8 @@ def get_current_question():
 @app.route('/api/qna_theme', methods=['POST'])
 def set_qna_theme():
     try:
+        if not dashboard_data:
+            return jsonify({'success': False, 'error': 'Dashboard not initialized'}), 500
         data = request.get_json()
         theme = data.get('theme', 'default')
         
@@ -1575,6 +1612,9 @@ def set_qna_theme():
 
 @app.route('/api/bot_status', methods=['GET'])
 def get_bot_status():
+    if not dashboard_data:
+        return jsonify({'success': False, 'error': 'Dashboard not initialized'}), 500
+    
     return jsonify({
         'discord_connected': dashboard_data.bot_status["discord_connected"],
         'twitch_connected': dashboard_data.bot_status["twitch_connected"],
@@ -1584,6 +1624,9 @@ def get_bot_status():
 @app.route('/api/force_notification', methods=['POST'])
 def force_notification():
     try:
+        if not dashboard_data or not bot:
+            return jsonify({'success': False, 'error': 'Bot not initialized'}), 500
+        
         # Get current stream status and force a notification
         stream_status = dashboard_data.get_twitch_stream_status()
         if stream_status and stream_status["is_live"]:
@@ -1607,6 +1650,9 @@ def force_notification():
 @app.route('/api/test_notification', methods=['POST'])
 def test_notification():
     try:
+        if not bot:
+            return jsonify({'success': False, 'error': 'Bot not initialized'}), 500
+            
         # Send a test notification regardless of stream status
         test_stream_info = {
             "title": "🧪 This is a test notification",
@@ -1623,6 +1669,9 @@ def test_notification():
 def change_obs_scene():
     """Change OBS scene"""
     try:
+        if not dashboard_data:
+            return jsonify({'success': False, 'error': 'Dashboard not initialized'}), 500
+            
         data = request.json if request.json else {}
         scene_name = data.get('scene_name', '')
         
@@ -1641,6 +1690,9 @@ def change_obs_scene():
 def get_obs_scenes():
     """Get list of available OBS scenes"""
     try:
+        if not dashboard_data:
+            return jsonify({'success': False, 'error': 'Dashboard not initialized'}), 500
+            
         if not dashboard_data.obs_client:
             return jsonify({"success": False, "error": "OBS not connected - use reconnect button"})
         
@@ -1678,29 +1730,32 @@ def initialize_components():
     """Initialize all components in the correct order"""
     global config, dashboard_data, bot
     
-    print(f"[{now()}] Starting ZeddyBot...")
+    print(f"[{now()}] [SYSTEM] Starting ZeddyBot...")
     
     # Step 1: Load configuration
-    print(f"[{now()}] Loading configuration...")
+    print(f"[{now()}] [CONFIG] Loading configuration...")
     config = Config("config.json")
     
     # Step 2: Initialize Discord bot
-    print(f"[{now()}] Initializing Discord bot...")
+    print(f"[{now()}] [DISCORD] Initializing Discord bot...")
     bot = ZeddyBot(config)
     
     # Step 3: Initialize dashboard data (but don't start chat reader yet)
-    print(f"[{now()}] Initializing dashboard...")
+    print(f"[{now()}] [DASHBOARD] Initializing dashboard...")
     dashboard_data = DashboardData("config.json")
     
     # Step 4: Start Twitch chat reader
-    print(f"[{now()}] Starting Twitch chat reader...")
+    print(f"[{now()}] [TWITCH] Starting Twitch chat reader...")
     dashboard_data.start_chat_reader()
     
+    # Give chat connection a moment to establish
+    time.sleep(2)
+    
     # Step 5: Connect to OBS
-    print(f"[{now()}] Connecting to OBS...")
+    print(f"[{now()}] [OBS] Connecting to OBS...")
     dashboard_data.connect_obs()
     
-    print(f"[{now()}] All components initialized!")
+    print(f"[{now()}] [SYSTEM] All components initialized!")
 
 
 if __name__ == "__main__":
@@ -1711,16 +1766,20 @@ if __name__ == "__main__":
     initialize_components()
     
     # Start Flask server
-    print(f"[{now()}] Starting HTTP server on http://0.0.0.0:5000")
+    print(f"[{now()}] [FLASK] Starting HTTP server on http://0.0.0.0:5000")
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
     
     # Start Discord bot (this will block until the bot shuts down)
     try:
-        print(f"[{now()}] Starting Discord bot connection...")
+        if not bot or not config:
+            print(f"[{now()}] [SYSTEM] Error: Bot or config not initialized properly")
+            exit(1)
+            
+        print(f"[{now()}] [DISCORD] Starting Discord bot connection...")
         bot.run(config.discord_token)
     except KeyboardInterrupt:
-        print(f"[{now()}] Shutting down...")
+        print(f"[{now()}] [SYSTEM] Shutting down...")
     except Exception as e:
-        print(f"[{now()}] Error running bot: {e}")
+        print(f"[{now()}] [SYSTEM] Error running bot: {e}")

@@ -324,9 +324,11 @@ class TwitchChatBot:
             if ready[0]:
                 try:
                     data = self.socket.recv(2048).decode('utf-8')
+                    # Only handle PING/PONG, chat reading is handled by DashboardData thread
                     for line in data.split('\r\n'):
-                        if line:
-                            self.dashboard_data.parse_chat_message(line)
+                        if line.startswith("PING"):
+                            if self.socket is not None:
+                                self.socket.send("PONG\r\n".encode("utf-8"))
                 except socket.error:
                     # Connection lost
                     self.connected = False
@@ -353,10 +355,7 @@ class TwitchChatBot:
                 if line.startswith("PING"):
                     if self.socket is not None:
                         self.socket.send("PONG\r\n".encode("utf-8"))
-                elif "PRIVMSG" in line:
-                    # Handle chat messages if needed
-                    if self.dashboard_data:
-                        self.dashboard_data.parse_chat_message(line)
+                # Chat message parsing is now handled by DashboardData thread
         except socket.error:
             # Connection lost
             self.connected = False
@@ -414,6 +413,70 @@ class DashboardData:
         self.cached_stream_status = None
         self.last_stream_check = 0
         self.stream_cache_duration = 30  # Cache for 30 seconds
+        
+        # Chat reading functionality
+        self.chat_sock = None
+        # Don't start chat reader automatically - will be started manually during startup
+
+    def start_chat_reader(self):
+        """Start background thread to read chat messages"""
+        def chat_reader():
+            while True:
+                try:
+                    self.connect_to_chat()
+                    while self.chat_sock:
+                        ready = select.select([self.chat_sock], [], [], 1)
+                        if ready[0]:
+                            data = self.chat_sock.recv(1024).decode('utf-8', errors='ignore')
+                            self.parse_chat_messages(data)
+                except Exception as e:
+                    print(f"[{self._log_timestamp()}] Chat reader error: {e}")
+                    time.sleep(5)
+        chat_thread = threading.Thread(target=chat_reader, daemon=True)
+        chat_thread.start()
+
+    def connect_to_chat(self):
+        """Connect to Twitch IRC for reading chat"""
+        try:
+            if self.chat_sock:
+                self.chat_sock.close()
+            self.chat_sock = socket.socket()
+            self.chat_sock.connect(("irc.chat.twitch.tv", 6667))
+            
+            # Use bot token if available, otherwise anonymous
+            if 'twitch_bot_access_token' in self.config and self.config['twitch_bot_access_token']:
+                self.chat_sock.send(f"PASS oauth:{self.config['twitch_bot_access_token']}\r\n".encode('utf-8'))
+                self.chat_sock.send(f"NICK {self.config.get('twitch_bot_username', 'Zeddy_bot')}\r\n".encode('utf-8'))
+            else:
+                # Anonymous connection for reading only
+                self.chat_sock.send(f"NICK justinfan12345\r\n".encode('utf-8'))
+            
+            self.chat_sock.send(f"JOIN #{self.config.get('target_channel', '')}\r\n".encode('utf-8'))
+            print(f"[{self._log_timestamp()}] Connected to chat: #{self.config.get('target_channel', '')}")
+        except Exception as e:
+            print(f"[{self._log_timestamp()}] Failed to connect to chat: {e}")
+            self.chat_sock = None
+
+    def parse_chat_messages(self, data):
+        """Parse incoming chat messages from IRC"""
+        lines = data.strip().split('\r\n')
+        for line in lines:
+            if 'PRIVMSG' in line:
+                try:
+                    parts = line.split(':', 2)
+                    if len(parts) >= 3:
+                        user_part = parts[1].split('!')[0]
+                        message = parts[2]
+                        self.chat_messages.append({
+                            'username': user_part,
+                            'message': message,
+                            'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+                        })
+                except Exception as e:
+                    print(f"[{self._log_timestamp()}] Error parsing message: {e}")
+            elif 'PING' in line:
+                if self.chat_sock:
+                    self.chat_sock.send("PONG :tmi.twitch.tv\r\n".encode('utf-8'))
 
     def test_chat_connection(self):
         """Test if chat connection credentials are working without sending a message"""
@@ -542,28 +605,6 @@ class DashboardData:
         print(f"[{self._log_timestamp()}] [OBS] Manual reconnection attempt...")
         self.connect_obs()
         return self.obs_client is not None
-
-    def parse_chat_message(self, line):
-        """Parse incoming IRC chat messages using the same method as original dashboardqa.py"""
-        try:
-            if 'PRIVMSG' in line:
-                # Parse IRC message format using colon splitting (original method)
-                parts = line.split(':', 2)
-                if len(parts) >= 3:
-                    user_part = parts[1].split('!')[0]
-                    message = parts[2]
-                    
-                    self.chat_messages.append({
-                        'username': user_part,
-                        'message': message,
-                        'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-                    })
-        except Exception as e:
-            print(f"[{self._log_timestamp()}] Error parsing message: {e}")
-            
-        # Handle PING to keep connection alive
-        if 'PING' in line:
-            return 'PONG :tmi.twitch.tv\r\n'
 
     def display_question_on_obs(self, username, message):
         """Display Q&A using browser source (primary method)"""
@@ -1131,17 +1172,21 @@ class ZeddyBot(commands.Bot):
 
         
 
-# Global instances
-config = Config("config.json")
-dashboard_data = DashboardData("config.json")
-bot = ZeddyBot(config)
+# Global variables - will be initialized in main
+config = None
+dashboard_data = None
+bot = None
 
-# Flask app setup
-app = Flask(__name__, template_folder='../templates')
-CORS(app)
+def create_flask_app():
+    """Create and configure Flask app"""
+    flask_app = Flask(__name__, template_folder='../templates')
+    CORS(flask_app)
+    return flask_app
 
-# Connect to OBS on startup (gracefully)
-dashboard_data.connect_obs()
+# Create Flask app
+app = create_flask_app()
+
+# Connect to OBS on startup will be called manually during startup
 
 # Flask Routes
 @app.route('/')
@@ -1629,23 +1674,51 @@ def get_obs_scenes():
         return jsonify({"success": False, "error": str(e)})
 
 
-def run_flask():
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+def initialize_components():
+    """Initialize all components in the correct order"""
+    global config, dashboard_data, bot
+    
+    print(f"[{now()}] Starting ZeddyBot...")
+    
+    # Step 1: Load configuration
+    print(f"[{now()}] Loading configuration...")
+    config = Config("config.json")
+    
+    # Step 2: Initialize Discord bot
+    print(f"[{now()}] Initializing Discord bot...")
+    bot = ZeddyBot(config)
+    
+    # Step 3: Initialize dashboard data (but don't start chat reader yet)
+    print(f"[{now()}] Initializing dashboard...")
+    dashboard_data = DashboardData("config.json")
+    
+    # Step 4: Start Twitch chat reader
+    print(f"[{now()}] Starting Twitch chat reader...")
+    dashboard_data.start_chat_reader()
+    
+    # Step 5: Connect to OBS
+    print(f"[{now()}] Connecting to OBS...")
+    dashboard_data.connect_obs()
+    
+    print(f"[{now()}] All components initialized!")
 
 
 if __name__ == "__main__":
-    print(f"[{now()}] Starting ZeddyBot...")
-    print(f"[{now()}] HTTP server starting on http://0.0.0.0:5000")
+    def run_flask():
+        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+        
+    # Initialize all components
+    initialize_components()
     
-    # Start Flask in a separate thread
+    # Start Flask server
+    print(f"[{now()}] Starting HTTP server on http://0.0.0.0:5000")
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
     
-    # Start Discord bot
+    # Start Discord bot (this will block until the bot shuts down)
     try:
-        config = Config()
-        bot = ZeddyBot(config)
+        print(f"[{now()}] Starting Discord bot connection...")
         bot.run(config.discord_token)
     except KeyboardInterrupt:
         print(f"[{now()}] Shutting down...")

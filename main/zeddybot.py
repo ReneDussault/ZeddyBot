@@ -738,68 +738,6 @@ class ZeddyBot(commands.Bot):
             print(message)
             self._last_log_line = message
 
-    def setup_http_server(self):
-        """Setup HTTP server for Stream Deck integration"""
-        app = Flask(__name__)
-        
-        # Disable Flask request logging for successful requests
-        import logging
-        log = logging.getLogger('werkzeug')
-        log.setLevel(logging.ERROR)
-        
-        # Bot moderation API endpoints removed due to TwitchInsights being discontinued
-
-        @app.route('/api/status', methods=['GET'])
-        def api_status():
-            return jsonify({
-                "success": True,
-                "bot_connected": self.is_ready(),
-                "twitch_connected": self.twitch_chat_bot.connected,
-                "message": "ZeddyBot is running"
-            })
-
-        @app.route('/api/discord_stats')
-        def api_discord_stats():
-            """Return Discord server member statistics"""
-            try:
-                guilds = self.guilds
-                if not guilds:
-                    return jsonify({"success": False, "error": "Bot not in any Discord servers"})
-                
-                guild = guilds[0]  # Use the first guild
-                
-                # Count total members
-                total_members = guild.member_count
-                
-                # Count online members (excluding bots)
-                online_members = sum(1 for member in guild.members 
-                                   if member.status != discord.Status.offline and not member.bot)
-                
-                # Count total humans (excluding bots)
-                total_humans = sum(1 for member in guild.members if not member.bot)
-                
-                return jsonify({
-                    "success": True,
-                    "stats": {
-                        "total_members": total_members,
-                        "total_humans": total_humans,
-                        "online_members": online_members,
-                        "bot_connected": True,
-                        "guild_name": guild.name
-                    }
-                })
-            except Exception as e:
-                return jsonify({"success": False, "error": str(e)})
-
-        # Run Flask in a separate thread
-        def run_flask():
-            app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
-        
-        flask_thread = threading.Thread(target=run_flask, daemon=True)
-        flask_thread.start()
-        print(f"[{now()}] HTTP server started on http://0.0.0.0:5001")
-
-
     def setup(self):
         """
         Some boilerplate commands and events

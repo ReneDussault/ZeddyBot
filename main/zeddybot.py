@@ -17,6 +17,7 @@ import os
 import time
 import select
 from collections import deque
+from typing import Optional
 
 # Add parent directory to path to import from tools
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -111,6 +112,22 @@ class Config:
     def access_token(self, value):
         self.data["access_token"] = value
 
+    @property
+    def watchlist(self):
+        return self.data.get("watchlist", [])
+
+    @property
+    def discord_live_role_id(self):
+        return self.data.get("discord_live_role_id", "")
+
+    @property
+    def discord_drifters_role_id(self):
+        return self.data.get("discord_drifters_role_id", "")
+
+    @property
+    def discord_outlaws_role_id(self):
+        return self.data.get("discord_outlaws_role_id", "")
+
     def get(self, key, default=None):
         return self.data.get(key, default)
 
@@ -139,6 +156,24 @@ class TwitchAPI:
         else:
             print(message)
             return False
+
+    def get_users(self, login_names):
+        params = {"login": login_names}
+        headers = {
+            "Authorization": f"Bearer {self.config.access_token}",
+            "Client-Id": self.config.twitch_client_id,
+        }
+        response = requests.get("https://api.twitch.tv/helix/users", params=params, headers=headers)
+        return {entry["login"]: entry["id"] for entry in response.json()["data"]}
+
+    def get_streams(self, users):
+        params = {"user_id": users.values()}
+        headers = {
+            "Authorization": f"Bearer {self.config.access_token}",
+            "Client-Id": self.config.twitch_client_id,
+        }
+        response = requests.get("https://api.twitch.tv/helix/streams", params=params, headers=headers)
+        return {entry["user_login"]: entry for entry in response.json()["data"]}
 
 
 class TwitchChatBot:
@@ -304,6 +339,61 @@ class TwitchChatBot:
             # Reset to blocking mode
             if self.socket:
                 self.socket.setblocking(True)
+
+    def check_for_ping(self):
+        """Check for PING from Twitch and respond with PONG"""
+        if not self.connected or self.socket is None:
+            return
+
+        try:
+            data = self.socket.recv(2048).decode("utf-8")
+            lines = data.strip().split('\r\n')
+            
+            for line in lines:
+                if line.startswith("PING"):
+                    if self.socket is not None:
+                        self.socket.send("PONG\r\n".encode("utf-8"))
+                elif "PRIVMSG" in line:
+                    # Handle chat messages if needed
+                    if self.dashboard_data:
+                        self.dashboard_data.parse_chat_message(line)
+        except socket.error:
+            # Connection lost
+            self.connected = False
+        except Exception as e:
+            if "timed out" not in str(e).lower():
+                print(f"[{now()}] Error in check_for_ping: {e}")
+
+
+class StreamNotificationManager:
+    def __init__(self, twitch_api: TwitchAPI, config: Config, chat_bot: Optional[TwitchChatBot] = None):
+        self.twitch_api = twitch_api
+        self.config = config
+        self.chat_bot = chat_bot
+        self.online_users = {}
+
+    def get_notifications(self):
+        users = self.twitch_api.get_users(self.config.watchlist)
+        streams = self.twitch_api.get_streams(users)
+
+        notifications = []
+        for user_name in self.config.watchlist:
+            if user_name not in self.online_users:
+                self.online_users[user_name] = datetime.now(timezone.utc)
+
+            if user_name not in streams:
+                self.online_users[user_name] = None
+            else:
+                started_at = datetime.strptime(streams[user_name]["started_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                if self.online_users[user_name] is None or started_at > self.online_users[user_name]:
+                    notifications.append(streams[user_name])
+                    self.online_users[user_name] = started_at
+
+                    # send notification to Twitch chat if this is the target channel
+                    if self.chat_bot and user_name.lower() == self.config.target_channel.lower():
+                        self.chat_bot.send_message(f"Stream is now live: {streams[user_name]['title']} - playing {streams[user_name]['game_name']}")
+
+        return notifications
 
 
 class DashboardData:
@@ -616,167 +706,497 @@ class DashboardData:
 
 
 class ZeddyBot(commands.Bot):
-    def __init__(self, config, dashboard_data):
-        intents = discord.Intents.default()
-        intents.message_content = True
+    def __init__(self, config: Config):
+        intents = discord.Intents.all()
         intents.members = True
-        intents.presences = True
-        super().__init__(command_prefix='!', intents=intents)
-        
+        super().__init__(command_prefix="!", intents=intents)
+
+        self._last_log_line = None
         self.config = config
-        self.dashboard_data = dashboard_data
         self.twitch_api = TwitchAPI(config)
-        self.twitch_chat_bot = TwitchChatBot(config, self.twitch_api, dashboard_data)
-        
-        # User tracking for stream notifications
-        self.online_users = {}
-        self.sent_notifications = set()
-        
-        # Role upgrade tracking
+        self.twitch_chat_bot = TwitchChatBot(config, self.twitch_api)
+        self.notification_manager = StreamNotificationManager(self.twitch_api, config, self.twitch_chat_bot)
+
+        self.CHANNEL_ID = int(config.discord_channel_id) if config.discord_channel_id else None
+        self.LIVE_ROLE_ID = config.discord_live_role_id
+        self.DRIFTERS_ROLE_ID = config.discord_drifters_role_id
+        self.OUTLAWS_ROLE_ID = config.discord_outlaws_role_id
+
+        # timestamps for tracking role upgrades
         self.user_join_timestamps = {}
-
-    async def on_ready(self):
-        print(f"[{now()}] ZeddyBot is connected to Discord ")
-        self.dashboard_data.bot_status["discord_connected"] = True
         
-        # Connect to Twitch chat
-        if self.twitch_chat_bot.connect():
-            self.dashboard_data.bot_status["twitch_connected"] = True
-        
-        # Start background tasks
-        self.update_discord_stats.start()
-        self.check_streams.start()
-        self.chat_listener.start()
-        self.update_token_task.start()
-        self.update_bot_token_task.start()
-        self.check_twitch_ping.start()
+        # For tracking sent notifications (used by Flask routes)
+        self.sent_notifications = set()
 
-    @loop(seconds=30)
-    async def update_discord_stats(self):
-        """Update Discord member statistics"""
-        try:
-            guild = self.get_guild(self.config.discord_channel_id)
-            if guild:
-                online_members = sum(1 for member in guild.members if not member.bot and member.status != discord.Status.offline)
+        # Bot moderation functionality removed due to TwitchInsights being discontinued
+
+        self.setup()
+
+
+    def log_once(self, message):
+        if getattr(self, "_last_log_line", None) != message:
+            print(message)
+            self._last_log_line = message
+
+    def setup_http_server(self):
+        """Setup HTTP server for Stream Deck integration"""
+        app = Flask(__name__)
+        
+        # Disable Flask request logging for successful requests
+        import logging
+        log = logging.getLogger('werkzeug')
+        log.setLevel(logging.ERROR)
+        
+        # Bot moderation API endpoints removed due to TwitchInsights being discontinued
+
+        @app.route('/api/status', methods=['GET'])
+        def api_status():
+            return jsonify({
+                "success": True,
+                "bot_connected": self.is_ready(),
+                "twitch_connected": self.twitch_chat_bot.connected,
+                "message": "ZeddyBot is running"
+            })
+
+        @app.route('/api/discord_stats')
+        def api_discord_stats():
+            """Return Discord server member statistics"""
+            try:
+                guilds = self.guilds
+                if not guilds:
+                    return jsonify({"success": False, "error": "Bot not in any Discord servers"})
+                
+                guild = guilds[0]  # Use the first guild
+                
+                # Count total members
+                total_members = guild.member_count
+                
+                # Count online members (excluding bots)
+                online_members = sum(1 for member in guild.members 
+                                   if member.status != discord.Status.offline and not member.bot)
+                
+                # Count total humans (excluding bots)
                 total_humans = sum(1 for member in guild.members if not member.bot)
                 
-                self.dashboard_data.discord_stats = {
-                    "online_members": online_members,
-                    "total_members": total_humans
+                return jsonify({
+                    "success": True,
+                    "stats": {
+                        "total_members": total_members,
+                        "total_humans": total_humans,
+                        "online_members": online_members,
+                        "bot_connected": True,
+                        "guild_name": guild.name
+                    }
+                })
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)})
+
+        # Run Flask in a separate thread
+        def run_flask():
+            app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
+        
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+        print(f"[{now()}] HTTP server started on http://0.0.0.0:5001")
+
+
+    def setup(self):
+        """
+        Some boilerplate commands and events
+        """
+
+        @self.command()
+        async def ping(ctx):
+            await ctx.send("Pong!")
+
+
+        @self.command()
+        async def hello(ctx):
+            await ctx.send(f"Hello {ctx.author.name}!")
+
+
+        @self.command()
+        async def twitch_chat(ctx, *, message):
+            if self.twitch_chat_bot.send_message(message):
+                await ctx.send(f"Message sent to Twitch chat: {message}")
+            else:
+                await ctx.send("Failed to send message to Twitch chat.")
+
+
+        @self.command()
+        async def refresh_bot_token(ctx):
+            if self.twitch_api.refresh_bot_token():
+                await ctx.send("Successfully refreshed the bot's Twitch token.")
+            else:
+                await ctx.send("Failed to refresh the bot's Twitch token.")
+
+        # Bot moderation commands
+        # Bot moderation Discord commands removed due to TwitchInsights being discontinued
+
+        @self.command()
+        async def test_stream_check(ctx):
+            """Debug command to manually test stream detection"""
+            try:
+                users = self.twitch_api.get_users(self.config.watchlist)
+                streams = self.twitch_api.get_streams(users)
+                
+                await ctx.send(f"Watchlist: {self.config.watchlist}")
+                await ctx.send(f"Users found: {users}")
+                await ctx.send(f"Streams found: {list(streams.keys())}")
+                
+                if streams:
+                    for user, stream in streams.items():
+                        await ctx.send(f"Stream: {user} - {stream['title']} - {stream['game_name']}")
+                else:
+                    await ctx.send("No active streams detected")
+                    
+            except Exception as e:
+                await ctx.send(f"Error testing stream check: {e}")
+
+        @self.command()
+        async def force_notification(ctx):
+            """Force send a notification for the current stream"""
+            try:
+                if not self.CHANNEL_ID:
+                    await ctx.send("Discord channel ID not configured")
+                    return
+                    
+                channel = self.get_channel(self.CHANNEL_ID)
+                if not channel:
+                    await ctx.send(f"Could not find Discord channel with ID {self.CHANNEL_ID}")
+                    return
+                
+                # Get actual current stream data
+                users = self.twitch_api.get_users(self.config.watchlist)
+                streams = self.twitch_api.get_streams(users)
+                
+                # Find your stream specifically
+                your_stream = None
+                for user_name in self.config.watchlist:
+                    if user_name.lower() == self.config.target_channel.lower() and user_name in streams:
+                        your_stream = streams[user_name]
+                        break
+                
+                if your_stream:
+                    await self._send_stream_notification(channel, your_stream)
+                    # Only send confirmation if command was used in a different channel
+                    if ctx.channel.id != self.CHANNEL_ID:
+                        await ctx.send("Live stream notification sent!")
+                else:
+                    await ctx.send("You are not currently live on Twitch, so no notification was sent.")
+                
+            except Exception as e:
+                await ctx.send(f"Error sending notification: {e}")
+
+        @self.command()
+        async def test_notification(ctx):
+            """Send a test notification (fake data)"""
+            try:
+                if not self.CHANNEL_ID:
+                    await ctx.send("Discord channel ID not configured")
+                    return
+                    
+                channel = self.get_channel(self.CHANNEL_ID)
+                if not channel:
+                    await ctx.send(f"Could not find Discord channel with ID {self.CHANNEL_ID}")
+                    return
+                
+                # Create a fake notification for testing
+                fake_notification = {
+                    'user_name': 'RenegadeZed',
+                    'user_login': 'renegadezed',
+                    'title': 'Test Stream Notification',
+                    'game_name': 'Test Game',
                 }
                 
-                print(f"[{now()}] Discord stats updated: {total_humans} humans, {online_members} online")
+                await self._send_stream_notification(channel, fake_notification)
+                # Only send confirmation if command was used in a different channel
+                if ctx.channel.id != self.CHANNEL_ID:
+                    await ctx.send("Test notification sent!")
+                
+            except Exception as e:
+                await ctx.send(f"Error sending test notification: {e}")
+
+
+        @self.event
+        async def on_ready():
+
+            print(f"[{now()}] ZeddyBot is connected to Discord ")
+            
+            # Initialize Discord stats cache
+            await self.update_discord_stats()
+            
+            self.update_token_task.start()
+            self.update_bot_token_task.start()
+            self.check_twitch_online_streamers.start()
+            self.check_twitch_ping.start()
+
+            self.twitch_chat_bot.connect()
+
+
+        @self.listen("on_member_update")
+        async def update_live_role_member(before, after):
+            await self.log_activity_changes(before, after)
+            await self._handle_live_role_update(before, after)
+            
+            # Update Discord stats if online status changed
+            if before.status != after.status:
+                await self.update_discord_stats()
+
+
+        @self.listen("on_presence_update")
+        async def update_live_role_presence(before, after):
+            await self.log_activity_changes(before, after)
+            await self._handle_live_role_update(before, after)
+            
+            # Update Discord stats if online status changed
+            if before.status != after.status:
+                await self.update_discord_stats()
+
+
+        @self.event
+        async def on_member_join(self, member):
+            print(f"[{now()}] {member} has joined the server")
+            
+            # drifters role - convert to int and validate
+            drifters_role = member.guild.get_role(int(self.DRIFTERS_ROLE_ID))
+            if drifters_role:
+                has_drifter_role = drifters_role in member.roles
+                
+                if not has_drifter_role:
+                    await member.add_roles(drifters_role)
+                    print(f"[{now()}] Added Drifters role to {member}")
+                    
+                    # role upgrade after 30 days
+                    self.loop.create_task(self._upgrade_role_after_delay(member))
+            else:
+                print(f"[{now()}] ERROR: Drifters role with ID {self.DRIFTERS_ROLE_ID} not found!")
+            
+            # Update Discord stats in real-time
+            await self.update_discord_stats()
+
+        @self.event
+        async def on_member_remove(self, member):
+            print(f"[{now()}] {member} has left the server")
+            
+            # Update Discord stats in real-time
+            await self.update_discord_stats()
+
+
+    async def update_discord_stats(self):
+        """Update Discord stats in real-time and notify dashboard"""
+        try:
+            if not self.guilds:
+                return
+            
+            guild = self.guilds[0]  # Assuming first guild
+            
+            # Count members and filter out bots
+            total_members = guild.member_count
+            human_members = len([m for m in guild.members if not m.bot])
+            online_members = len([m for m in guild.members if m.status != discord.Status.offline and not m.bot])
+            
+            # Store stats for API endpoint
+            self._discord_stats = {
+                'total_members': total_members,
+                'total_humans': human_members,
+                'online_members': online_members,
+                'bot_connected': self.is_ready(),
+                'guild_name': guild.name,
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            print(f"[{now()}] Discord stats updated: {human_members} humans, {online_members} online")
+            
         except Exception as e:
             print(f"[{now()}] Error updating Discord stats: {e}")
 
-    @loop(seconds=60)
-    async def check_streams(self):
-        """Check for new streams and send notifications"""
-        try:
-            # Update dashboard data
-            self.dashboard_data.update_data()
-            
-            # Get current stream status
-            stream_status = self.dashboard_data.get_twitch_stream_status()
-            if not stream_status:
-                return
-                
-            # Check if stream just went live
-            if stream_status["is_live"]:
-                stream_key = stream_status["started_at"]
-                if stream_key and stream_key not in self.sent_notifications:
-                    await self.send_stream_notification(stream_status)
-                    self.sent_notifications.add(stream_key)
-            
-        except Exception as e:
-            print(f"[{now()}] Error in stream check: {e}")
+    async def log_activity_changes(self, before, after):
+        before_activities = set((a.type, getattr(a, 'name', None)) for a in before.activities)
+        after_activities = set((a.type, getattr(a, 'name', None)) for a in after.activities)
 
-    @loop(seconds=5)
-    async def chat_listener(self):
-        """Listen for Twitch chat messages"""
-        try:
-            if self.twitch_chat_bot.connected:
-                self.twitch_chat_bot.listen_for_chat()
-            elif not self.twitch_chat_bot.connected:
-                # Try to reconnect periodically
-                if self.twitch_chat_bot.connect():
-                    self.dashboard_data.bot_status["twitch_connected"] = True
-                else:
-                    self.dashboard_data.bot_status["twitch_connected"] = False
-        except Exception as e:
-            print(f"[{now()}] Error in chat listener: {e}")
+        started = after_activities - before_activities
+        stopped = before_activities - after_activities
+
+        for act_type, act_name in started:
+            self.log_once(f"[{now()}] User '{after.name}' started activity: {act_type.name} ({act_name})")
+        for act_type, act_name in stopped:
+            self.log_once(f"[{now()}] User '{after.name}' stopped activity: {act_type.name} ({act_name})")
+
+        if before.status == discord.Status.offline and after.status != discord.Status.offline:
+            self.log_once(f"[{now()}] User '{after.name}' has come online.")
+        elif before.status != discord.Status.offline and after.status == discord.Status.offline:
+            self.log_once(f"[{now()}] User '{after.name}' has gone offline.")
+
+        
+    async def _handle_live_role_update(self, before, after):
+        is_streaming = any(a for a in after.activities if a.type == discord.ActivityType.streaming)
+        has_live_role = int(self.LIVE_ROLE_ID) in after._roles
+
+        if is_streaming and not has_live_role:
+            print(f"[{now()}] Giving LIVE role to {after.name}")
+            
+            # Convert to int and validate role exists
+            live_role = after.guild.get_role(int(self.LIVE_ROLE_ID))
+            if live_role:
+                await after.add_roles(live_role)
+                
+                # send message to Twitch chat that stream is starting
+                if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
+                    self.twitch_chat_bot.send_message(f"Discord status updated to streaming! Welcome everyone!")
+            else:
+                print(f"[{now()}] ERROR: Live role with ID {self.LIVE_ROLE_ID} not found!")
+
+        elif not is_streaming and has_live_role:
+            print(f"[{now()}] Removing LIVE role from {after.name}")
+            
+            # Convert to int and validate role exists
+            live_role = after.guild.get_role(int(self.LIVE_ROLE_ID))
+            if live_role:
+                await after.remove_roles(live_role)
+                
+                # send message to Twitch chat that stream is ending
+                if hasattr(after, "name") and after.name.lower() == self.config.target_channel.lower():
+                    self.twitch_chat_bot.send_message("Stream appears to be ending. Thanks for watching!")
+            else:
+                print(f"[{now()}] ERROR: Live role with ID {self.LIVE_ROLE_ID} not found!")
+
+
+    async def _upgrade_role_after_delay(self, member, days=30):
+        """promote member to Outlaws role after 30 days"""
+        await asyncio.sleep(days * 24 * 60 * 60)
+        
+        guild = member.guild
+        updated_member = guild.get_member(member.id)
+        if not updated_member:
+            return
+        
+        # Convert to int and validate roles exist
+        outlaws_role = guild.get_role(int(self.OUTLAWS_ROLE_ID))
+        drifters_role = guild.get_role(int(self.DRIFTERS_ROLE_ID))
+        
+        if outlaws_role and drifters_role:
+            has_outlaw_role = outlaws_role in updated_member.roles
+            if not has_outlaw_role:
+                await updated_member.add_roles(outlaws_role)
+                await updated_member.remove_roles(drifters_role)
+                print(f"[{now()}] Upgraded {updated_member.name} to Outlaws after {days} days")
+        else:
+            print(f"[{now()}] ERROR: Required roles not found - Outlaws: {self.OUTLAWS_ROLE_ID}, Drifters: {self.DRIFTERS_ROLE_ID}")
 
     @loop(hours=24 * 5)
     async def update_token_task(self):
-        """Update app access token every 5 days"""
-        try:
-            acc_tok = self.twitch_api.get_app_access_token()
-            print(f"[{now()}] Changing access token ")
-            
-            self.config.access_token = acc_tok
-            self.config.save()
-            await self.change_presence(status=discord.Status.online)
-        except Exception as e:
-            print(f"[{now()}] Error updating app access token: {e}")
+        acc_tok = self.twitch_api.get_app_access_token()
+
+        print(f"[{now()}] Changing access token ")
+        
+        self.config.access_token = acc_tok
+        self.config.save()
+        await self.change_presence(status=discord.Status.online)
+
 
     @loop(hours=24)
     async def update_bot_token_task(self):
-        """Update bot access token every 24 hours"""
-        try:
-            self.twitch_api.refresh_bot_token()
-        except Exception as e:
-            print(f"[{now()}] Error updating bot token: {e}")
+        self.twitch_api.refresh_bot_token()
+
 
     @loop(minutes=2)
     async def check_twitch_ping(self):
-        """Check Twitch chat connection every 2 minutes"""
-        try:
-            # Check if chat bot is connected, reconnect if needed
-            if not self.twitch_chat_bot.is_connected():
-                print(f"[{now()}] Twitch chat disconnected, attempting reconnection...")
-                if self.twitch_chat_bot.connect():
-                    self.dashboard_data.bot_status["twitch_connected"] = True
-                    print(f"[{now()}] Twitch chat reconnected successfully")
-                else:
-                    self.dashboard_data.bot_status["twitch_connected"] = False
-                    print(f"[{now()}] Failed to reconnect to Twitch chat")
-        except Exception as e:
-            print(f"[{now()}] Error in Twitch ping check: {e}")
+        # Check if chat bot is connected, reconnect if needed
+        if not self.twitch_chat_bot.is_connected():
+            print(f"[{now()}] Twitch chat bot disconnected, attempting reconnection...")
+            if self.twitch_chat_bot.connect():
+                print(f"[{now()}] Twitch chat bot reconnected successfully")
+            else:
+                print(f"[{now()}] Failed to reconnect Twitch chat bot")
+        else:
+            self.twitch_chat_bot.check_for_ping()
+
+
+    @loop(seconds=60)
+    async def check_twitch_online_streamers(self):
+        if not self.CHANNEL_ID:
+            print(f"[{now()}] Discord channel ID not configured")
+            return
+            
+        channel = self.get_channel(self.CHANNEL_ID)
+        if not channel:
+            print(f"[{now()}] Could not find Discord channel with ID {self.CHANNEL_ID}")
+            return
+
+        notifications = self.notification_manager.get_notifications()
+        for notification in notifications:
+            await self._send_stream_notification(channel, notification)
+
+
+    async def _send_stream_notification(self, channel, notification):
+
+        print(f"[{now()}] Sending discord notification ")
+
+        embed = discord.Embed(
+            title=f"{notification['user_name']} is live on Twitch",
+            url=f"https://www.twitch.tv/{notification['user_login']}",
+            color=0x9146FF,
+            timestamp=datetime.now(),
+        )
+
+        embed.set_author(
+            name=f"{notification['user_name']}",
+            url=f"https://www.twitch.tv/{notification['user_login']}",
+            icon_url=f"https://avatar.glue-bot.xyz/twitch/{notification['user_login']}",
+        )
+
+        # Only set thumbnail if game_name exists and is not empty
+        if notification.get('game_name') and notification['game_name'].strip():
+            try:
+                # URL encode the game name to handle special characters
+                import urllib.parse
+                encoded_game = urllib.parse.quote(notification['game_name'])
+                embed.set_thumbnail(url=f"https://avatar-resolver.vercel.app/twitch-boxart/{encoded_game}")
+            except Exception as e:
+                print(f"[{now()}] Warning: Could not set thumbnail for game {notification.get('game_name')}: {e}")
+
+        embed.add_field(
+            name="",
+            value=notification["title"] or "No Title",
+            inline=False,
+        )
+
+        embed.add_field(
+            name=":joystick: Game",
+            value=notification["game_name"] or "No Game",
+            inline=True,
+        )
+
+        await channel.send(embed=embed)
 
     async def send_stream_notification(self, stream_info):
-        """Send Discord notification when stream goes live"""
-        try:
-            channel = self.get_channel(self.config.discord_channel_id)
-            # Only send to text-based channels that support sending messages
-            if isinstance(channel, (discord.TextChannel, discord.DMChannel, discord.Thread)):
-                embed = discord.Embed(
-                    title=f"🔴 {self.config.target_channel} is now live!",
-                    description=stream_info["title"],
-                    color=0x9146FF,
-                    url=f"https://twitch.tv/{self.config.target_channel}",
-                    timestamp=datetime.now()
-                )
-                
-                if stream_info["game_name"]:
-                    embed.add_field(name="Game", value=stream_info["game_name"], inline=True)
-                
-                if stream_info["thumbnail_url"]:
-                    embed.set_image(url=stream_info["thumbnail_url"])
-                
-                await channel.send(embed=embed)
-                
-                # Also send to Twitch chat
-                chat_message = f"🔴 {self.config.target_channel} just went live! Check it out at https://twitch.tv/{self.config.target_channel}"
-                self.twitch_chat_bot.send_message(chat_message)
-                
-        except Exception as e:
-            print(f"[{now()}] Error sending stream notification: {e}")
+        """Public method for sending stream notifications (used by Flask routes)"""
+        if not self.CHANNEL_ID:
+            print(f"[{now()}] No Discord channel configured")
+            return
+            
+        channel = self.get_channel(self.CHANNEL_ID)
+        if not channel:
+            print(f"[{now()}] Could not find Discord channel with ID {self.CHANNEL_ID}")
+            return
+        
+        # Convert stream_info format to notification format expected by _send_stream_notification
+        notification = {
+            'user_name': stream_info.get('user_name', 'Unknown'),
+            'user_login': stream_info.get('user_login', 'unknown'),
+            'title': stream_info.get('title', 'No Title'),
+            'game_name': stream_info.get('game_name', 'No Game')
+        }
+        
+        await self._send_stream_notification(channel, notification)
 
+        
 
 # Global instances
 config = Config("config.json")
 dashboard_data = DashboardData("config.json")
-bot = ZeddyBot(config, dashboard_data)
+bot = ZeddyBot(config)
 
 # Flask app setup
 app = Flask(__name__, template_folder='../templates')
@@ -1286,6 +1706,8 @@ if __name__ == "__main__":
     
     # Start Discord bot
     try:
+        config = Config()
+        bot = ZeddyBot(config)
         bot.run(config.discord_token)
     except KeyboardInterrupt:
         print(f"[{now()}] Shutting down...")

@@ -173,11 +173,14 @@ class TwitchChatBot:
             # Wait for successful connection
             response = self.socket.recv(2048).decode('utf-8')
             if "Welcome, GLHF!" in response or "End of /NAMES list" in response:
+                message = "ZeddyBot connected!"
                 self.connected = True
                 self.socket.settimeout(None)  # Remove timeout for normal operation
                 print(f"[{now()}] Connected to Twitch chat as {self.config.twitch_bot_username}")
-                print(f"[{now()}] Sending Twitch chat messages...")
-                self.send_message("ZeddyBot connected!")
+                print(f"[{now()}] Sending to Twitch chat: {message}")
+                self.send_message(message)
+                print(f"[{now()}] Message sent to Twitch chat!")
+
                 return True
             else:
                 print(f"[{now()}] Unexpected response during connection: {response}")
@@ -236,7 +239,6 @@ class TwitchChatBot:
             if self.socket is not None:
                 message_to_send = f"PRIVMSG {self.channel} :{message}\r\n"
                 self.socket.send(message_to_send.encode('utf-8'))
-                print(f"[{now()}] Sending to Twitch chat: {message}")
                 
                 # Add sent message to chat display (since Twitch doesn't echo it back)
                 if self.dashboard_data is not None:

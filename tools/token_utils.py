@@ -50,25 +50,29 @@ def refresh_twitch_bot_token(config_path="../config.json"):
                 json.dump(config, f, indent=2)
             
             timestamp = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-            message = f"[{timestamp}] Successfully refreshed bot access token"
+            message = f"[{timestamp}] [TWITCH] Successfully refreshed bot access token"
             print(message)
             
             return True, message, new_access_token
         else:
-            error_msg = f"Failed to refresh bot token: HTTP {response.status_code} - {response.text}"
+            timestamp = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+            error_msg = f"[{timestamp}] [TWITCH] Failed to refresh bot token: HTTP {response.status_code} - {response.text}"
             print(error_msg)
             return False, error_msg, None
             
     except FileNotFoundError:
-        error_msg = f"Config file not found: {config_path}"
+        timestamp = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+        error_msg = f"[{timestamp}] [CONFIG] Config file not found: {config_path}"
         print(error_msg)
         return False, error_msg, None
     except json.JSONDecodeError:
-        error_msg = f"Invalid JSON in config file: {config_path}"
+        timestamp = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+        error_msg = f"[{timestamp}] [CONFIG] Invalid JSON in config file: {config_path}"
         print(error_msg)
         return False, error_msg, None
     except Exception as e:
-        error_msg = f"Error refreshing bot token: {e}"
+        timestamp = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+        error_msg = f"[{timestamp}] [TWITCH] Error refreshing bot token: {e}"
         print(error_msg)
         return False, error_msg, None
 
@@ -88,7 +92,8 @@ def get_current_bot_token(config_path="../config.json"):
             config = json.load(f)
         return config.get('twitch_bot_access_token')
     except Exception as e:
-        print(f"Error reading bot token: {e}")
+        timestamp = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+        print(f"[{timestamp}] [CONFIG] Error reading bot token: {e}")
         return None
 
 

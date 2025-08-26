@@ -985,7 +985,7 @@ class ZeddyBot(commands.Bot):
                 'last_updated': datetime.now().isoformat()
             }
             
-            print(f"[{now()}] Discord stats updated: {human_members} humans, {online_members} online")
+            print(f"[{now()}] [DISCORD] Discord stats updated: {human_members} humans, {online_members} online")
             
         except Exception as e:
             print(f"[{now()}] Error updating Discord stats: {e}")
@@ -1067,8 +1067,8 @@ class ZeddyBot(commands.Bot):
     async def update_token_task(self):
         acc_tok = self.twitch_api.get_app_access_token()
 
-        print(f"[{now()}] Changing access token ")
-        
+        print(f"[{now()}] [TWITCH] Changing access token ")
+
         self.config.access_token = acc_tok
         self.config.save()
         await self.change_presence(status=discord.Status.online)

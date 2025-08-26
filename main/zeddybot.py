@@ -535,66 +535,56 @@ class DashboardData:
             return self.cached_stream_status
         
         try:
-            # Get user info first
-            user_url = f"https://api.twitch.tv/helix/users?login={self.config.get('target_channel', '')}"
-            user_headers = {
-                'Client-ID': self.config.get('twitch_bot_client_id', ''),
-                'Authorization': f'Bearer {self.config.get("twitch_bot_access_token", "")}'
+            headers = {
+                "Authorization": f"Bearer {self.config['access_token']}",
+                "Client-Id": self.config['twitch_client_id']
             }
             
-            user_response = requests.get(user_url, headers=user_headers, timeout=10)
+            # Get user ID first
+            user_response = requests.get(
+                "https://api.twitch.tv/helix/users",
+                params={"login": self.config.get("target_channel", "")},
+                headers=headers,
+                timeout=10  # Add timeout to prevent hanging
+            )
             
             if user_response.status_code != 200:
                 print(f"[{self._log_timestamp()}] Failed to get user info: {user_response.status_code}")
-                # Update cache timestamp even on failure to prevent spam
+                self.cached_stream_status = None
                 self.last_stream_check = current_time
-                return self.cached_stream_status
+                return None
                 
-            user_data = user_response.json()
-            if not user_data.get('data'):
+            user_data = user_response.json()["data"]
+            if not user_data:
                 print(f"[{self._log_timestamp()}] No user data found for channel: {self.config.get('target_channel', '')}")
+                self.cached_stream_status = None
                 self.last_stream_check = current_time
-                return self.cached_stream_status
+                return None
                 
-            user_id = user_data['data'][0]['id']
+            user_id = user_data[0]["id"]
             
-            # Get stream info
-            stream_url = f"https://api.twitch.tv/helix/streams?user_id={user_id}"
-            stream_response = requests.get(stream_url, headers=user_headers, timeout=10)
+            # Get stream status
+            stream_response = requests.get(
+                "https://api.twitch.tv/helix/streams",
+                params={"user_id": user_id},
+                headers=headers,
+                timeout=10  # Add timeout to prevent hanging
+            )
             
-            if stream_response.status_code != 200:
-                print(f"[{self._log_timestamp()}] Failed to get stream info: {stream_response.status_code}")
+            if stream_response.status_code == 200:
+                streams = stream_response.json()["data"]
+                stream_data = streams[0] if streams else None
+                
+                # Cache the result
+                self.cached_stream_status = stream_data
                 self.last_stream_check = current_time
-                return self.cached_stream_status
                 
-            stream_data = stream_response.json()
-            
-            if stream_data['data']:
-                # Stream is live
-                stream_info = stream_data['data'][0]
-                result = {
-                    'is_live': True,
-                    'title': stream_info.get('title', ''),
-                    'game_name': stream_info.get('game_name', ''),
-                    'viewer_count': stream_info.get('viewer_count', 0),
-                    'started_at': stream_info.get('started_at', ''),
-                    'thumbnail_url': stream_info.get('thumbnail_url', '').replace('{width}', '1920').replace('{height}', '1080')
-                }
+                return stream_data
             else:
-                # Stream is offline
-                result = {
-                    'is_live': False,
-                    'title': '',
-                    'game_name': '',
-                    'viewer_count': 0,
-                    'started_at': '',
-                    'thumbnail_url': ''
-                }
-            
-            # Update cache
-            self.cached_stream_status = result
-            self.last_stream_check = current_time
-            return result
+                print(f"[{self._log_timestamp()}] Failed to get stream info: {stream_response.status_code}")
+                self.cached_stream_status = None
+                self.last_stream_check = current_time
+                return None
                 
         except requests.exceptions.Timeout:
             print(f"[{self._log_timestamp()}] Twitch API timeout")

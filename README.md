@@ -8,6 +8,7 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
 
   - Live stream and bot status overview
   - **Instant chat monitoring** with Server-Sent Events (SSE) - messages appear within 1-2 seconds
+  - **Interactive Q&A system** - click chat messages to display them on stream via OBS
   - Send messages directly to Twitch chat from your browser
   - Stream history and Discord server statistics
   - Modern, responsive UI with real-time updates
@@ -28,6 +29,7 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
 
 - **Advanced Technology**
   - Server-Sent Events (SSE) for instant updates - no more polling delays
+  - **OBS WebSocket integration** for live Q&A display on stream
   - Automatic connection management and heartbeat monitoring
   - Scales to multiple concurrent dashboard sessions
   - Enhanced logging with broadcast monitoring
@@ -39,11 +41,18 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
 ![Dashboard](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/dashboard.png)
 _Real-time dashboard with instant chat updates_
 
+### Discord "Live" Notification
+
 ![Stream Notification](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/notif.png)
 
 ### Bot Console
 
 ![Bot Console](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/terminal.png)
+
+### Q&A feature
+
+![Q&A](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/Q&A.png)
+![OBS](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/OBS.png)
 
 ### Role Management
 

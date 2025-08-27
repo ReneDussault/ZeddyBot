@@ -1026,9 +1026,9 @@ class ZeddyBot(commands.Bot):
         stopped = before_activities - after_activities
 
         for act_type, act_name in started:
-            print(f"[{now()}] [DISCORD] User '{after.name}' started activity: {act_type.name} ({act_name})")
+            print(f"[{now()}] [DISCORD] User '{after.name}' started activity:\n    ╰› {act_type.name} ({act_name})")
         for act_type, act_name in stopped:
-            print(f"[{now()}] [DISCORD] User '{after.name}' stopped activity: {act_type.name} ({act_name})")
+            print(f"[{now()}] [DISCORD] User '{after.name}' stopped activity:\n    ╰› {act_type.name} ({act_name})")
 
         if before.status == discord.Status.offline and after.status != discord.Status.offline:
             print(f"[{now()}] [DISCORD] User '{after.name}' has come online.")

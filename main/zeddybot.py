@@ -499,10 +499,6 @@ class DashboardData:
                         
                         # Always broadcast all messages to SSE clients
                         broadcast_chat_message(message_data)
-                        
-                        # Only log non-bot messages to console to avoid spam
-                        if user_part != "zeddy_bot":
-                            print(f"[{now()}] [TWITCH] Chat message received: {user_part}: {message}")
                             
                 except Exception as e:
                     print(f"[{self._log_timestamp()}] [TWITCH] Error parsing message: {e}")
@@ -1224,11 +1220,12 @@ chat_sse_clients = []
 
 def broadcast_chat_message(message_data):
     """Broadcast new chat message to all connected SSE clients"""
-    print(f"[{now()}] [SSE] Broadcasting message to {len(chat_sse_clients)} clients: {message_data['username']}: {message_data['message']}")
-    
+    print(f"[{now()}] [SSE] Broadcasting message to {len(chat_sse_clients)} clients: \n    ╰› {message_data['username']}: {message_data['message']}")
+
     if not chat_sse_clients:
         return
         
+    
     # Format as SSE data
     sse_data = f"data: {json.dumps(message_data)}\n\n"
     
@@ -1345,11 +1342,11 @@ def send_quick_message():
         
         # Define message mapping for the template's message types
         message_map = {
-            'welcome': "Thanks for watching! Welcome to the stream!",
-            'follow': "Thanks for the follow! Don't forget to hit that notification bell!",
+            'welcome': "Welcome to the stream!",
+            'follow': "Thanks for the follow!",
             'brb': "Be right back! Thanks for your patience!",
-            'ending': "Thanks for watching! Stream ending soon!",
-            'lurk': "Thanks for the lurk! Enjoy the stream!"
+            'ending': "Stream ending soon! Thanks for watching!",
+            'lurk': "Thanks for the lurk!"
         }
         
         # Handle both new format (type) and old format (index)

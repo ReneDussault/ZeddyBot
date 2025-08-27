@@ -286,8 +286,8 @@ class TwitchChatBot:
                 if self.dashboard_data is not None:
                     self.dashboard_data.chat_messages.append(message_data)
                 
-                # Broadcast bot messages to SSE clients too
-                broadcast_chat_message(message_data)
+                # Don't broadcast here - let parse_chat_messages handle it when we see our own message
+                # This prevents duplicate broadcasting
             
             return True
             
@@ -312,7 +312,7 @@ class TwitchChatBot:
                         }
                         if self.dashboard_data is not None:
                             self.dashboard_data.chat_messages.append(message_data)
-                        broadcast_chat_message(message_data)
+                        # Don't broadcast here either - let parse_chat_messages handle it
                         
                         return True
                     else:
@@ -497,10 +497,12 @@ class DashboardData:
                         # Add to local storage
                         self.chat_messages.append(message_data)
                         
-                        # Broadcast to connected SSE clients in real-time (only for non-bot messages)
-                        if user_part != "zeddy_bot":  # Avoid logging bot messages
+                        # Always broadcast all messages to SSE clients
+                        broadcast_chat_message(message_data)
+                        
+                        # Only log non-bot messages to console to avoid spam
+                        if user_part != "zeddy_bot":
                             print(f"[{now()}] [TWITCH] Chat message received: {user_part}: {message}")
-                            broadcast_chat_message(message_data)
                             
                 except Exception as e:
                     print(f"[{self._log_timestamp()}] [TWITCH] Error parsing message: {e}")
@@ -806,7 +808,7 @@ class ZeddyBot(commands.Bot):
 
     def log_once(self, message):
         if getattr(self, "_last_log_line", None) != message:
-            print(f"[{now()}] [ZEDDYBOT] {message}")
+            print(f"[{now()}] {message}")
             self._last_log_line = message
 
     def setup(self):
@@ -1222,6 +1224,8 @@ chat_sse_clients = []
 
 def broadcast_chat_message(message_data):
     """Broadcast new chat message to all connected SSE clients"""
+    print(f"[{now()}] [SSE] Broadcasting message to {len(chat_sse_clients)} clients: {message_data['username']}: {message_data['message']}")
+    
     if not chat_sse_clients:
         return
         
@@ -1233,7 +1237,8 @@ def broadcast_chat_message(message_data):
     for client_queue in chat_sse_clients:
         try:
             client_queue.put(sse_data)
-        except:
+        except Exception as e:
+            print(f"[{now()}] [SSE] Error sending to client: {e}")
             clients_to_remove.append(client_queue)
     
     # Clean up disconnected clients
@@ -1452,9 +1457,20 @@ def test_chat():
 @app.route('/api/chat/stream')
 def chat_stream():
     """Server-Sent Events endpoint for real-time chat updates"""
+    
     def event_stream():
         client_queue = queue.Queue()
         chat_sse_clients.append(client_queue)
+        print(f"[{now()}] [SSE] Client connected, total clients: {len(chat_sse_clients)}")
+        
+        # Send initial connection confirmation
+        connection_msg = {
+            'type': 'system',
+            'username': 'System',
+            'message': 'Real-time chat connected',
+            'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+        }
+        yield f"data: {json.dumps(connection_msg)}\n\n"
         
         try:
             while True:
@@ -1469,12 +1485,37 @@ def chat_stream():
             # Client disconnected
             if client_queue in chat_sse_clients:
                 chat_sse_clients.remove(client_queue)
+                print(f"[{now()}] [SSE] Client disconnected, remaining: {len(chat_sse_clients)}")
 
-    return Response(event_stream(), mimetype='text/event-stream',
-                   headers={'Cache-Control': 'no-cache',
-                           'Connection': 'keep-alive',
-                           'Access-Control-Allow-Origin': '*',
-                           'Access-Control-Allow-Headers': 'Cache-Control'})
+    response = Response(event_stream(), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['Connection'] = 'keep-alive'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Cache-Control'
+    response.headers['X-Accel-Buffering'] = 'no'  # Disable nginx buffering
+    return response
+
+@app.route('/api/test_sse', methods=['POST'])
+def test_sse():
+    """Test route to manually trigger an SSE message"""
+    test_message = {
+        'username': 'TestSSE',
+        'message': 'This is a test SSE message',
+        'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+    }
+    broadcast_chat_message(test_message)
+    return jsonify({'success': True, 'message': 'Test SSE message sent'})
+
+@app.route('/api/debug')
+def debug_endpoint():
+    """Simple debug endpoint to test if browser can reach Flask"""
+    print(f"[{now()}] [DEBUG] Browser reached debug endpoint")
+    return jsonify({
+        'success': True, 
+        'message': 'Debug endpoint reached successfully',
+        'sse_clients': len(chat_sse_clients),
+        'timestamp': datetime.now().isoformat()
+    })
 
 @app.route('/api/refresh_token', methods=['POST'])
 def refresh_token():

@@ -730,34 +730,51 @@
                     chatDiv.removeChild(chatDiv.lastChild);
                 }
             }
+            
+            // Make function globally accessible
+            window.addMessageToChat = addMessageToChat;
 
             // Initialize real-time chat with Server-Sent Events
             function initRealTimeChat() {
+                console.log('[CHAT] Creating new EventSource for /api/chat/stream');
                 const eventSource = new EventSource('/api/chat/stream');
                 
                 eventSource.onmessage = function(event) {
                     try {
+                        console.log('[CHAT] SSE message received:', event.data);
                         const messageData = JSON.parse(event.data);
                         
                         if (messageData.type === 'heartbeat') {
+                            console.log('[CHAT] SSE heartbeat received');
                             return; // Ignore heartbeat messages
                         }
                         
+                        if (messageData.type === 'system') {
+                            console.log('[CHAT] ✅ ' + messageData.message);
+                            return; // Don't display system messages in chat
+                        }
+                        
                         // Add new message to chat immediately
-                        addMessageToChat(messageData);
-                        console.log('[CHAT] Real-time message received:', messageData.username + ': ' + messageData.message);
+                        if (typeof window.addMessageToChat === 'function') {
+                            window.addMessageToChat(messageData);
+                            console.log('[CHAT] Real-time message displayed:', messageData.username + ': ' + messageData.message);
+                        } else {
+                            console.error('[CHAT] addMessageToChat function not found');
+                        }
                         
                     } catch (error) {
-                        console.error('[CHAT] Error parsing SSE message:', error);
+                        console.error('[CHAT] Error parsing SSE message:', error, 'Raw data:', event.data);
                     }
                 };
                 
                 eventSource.onerror = function(event) {
-                    console.log('[CHAT] SSE connection error, will auto-reconnect');
+                    console.error('[CHAT] SSE connection error:', event);
+                    console.log('[CHAT] ReadyState:', eventSource.readyState);
+                    console.log('[CHAT] Will auto-reconnect...');
                 };
                 
                 eventSource.onopen = function(event) {
-                    console.log('[CHAT] Real-time chat connected');
+                    console.log('[CHAT] ✅ SSE connection established successfully!');
                 };
                 
                 return eventSource;
@@ -857,25 +874,37 @@
                 }
             }
 
-            // Initialize real-time chat instead of polling
-            let chatEventSource;
-            
-            setInterval(refreshQuestion, 15000);  // Keep Q&A refresh interval
-            
-            // Load initial chat history
-            updateChat();
-            
-            // Start real-time chat updates
-            chatEventSource = initRealTimeChat();
-            
-            refreshQuestion();
-            
-            // Clean up SSE connection when page is unloaded
-            window.addEventListener('beforeunload', function() {
-                if (chatEventSource) {
-                    chatEventSource.close();
-                    console.log('[CHAT] SSE connection closed');
+            // Wait for page to be fully loaded before initializing
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('[CHAT] Page loaded, initializing dashboard...');
+                
+                // Initialize real-time chat instead of polling
+                let chatEventSource;
+                
+                // Clear any old chat messages on page load
+                const chatDiv = document.getElementById('chat-messages');
+                if (chatDiv) {
+                    chatDiv.innerHTML = '';
                 }
+                
+                setInterval(refreshQuestion, 15000);  // Keep Q&A refresh interval
+                
+                // Start real-time chat updates with a small delay to ensure everything is ready
+                console.log('[CHAT] Starting SSE connection in 2 seconds...');
+                setTimeout(function() {
+                    console.log('[CHAT] Initializing SSE connection now...');
+                    chatEventSource = initRealTimeChat();
+                }, 2000);
+                
+                refreshQuestion();
+                
+                // Clean up SSE connection when page is unloaded
+                window.addEventListener('beforeunload', function() {
+                    if (chatEventSource) {
+                        chatEventSource.close();
+                        console.log('[CHAT] SSE connection closed');
+                    }
+                });
             });
 
             // Dashboard data and chat send

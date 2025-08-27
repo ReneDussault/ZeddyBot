@@ -1495,28 +1495,6 @@ def chat_stream():
     response.headers['X-Accel-Buffering'] = 'no'  # Disable nginx buffering
     return response
 
-@app.route('/api/test_sse', methods=['POST'])
-def test_sse():
-    """Test route to manually trigger an SSE message"""
-    test_message = {
-        'username': 'TestSSE',
-        'message': 'This is a test SSE message',
-        'timestamp': datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-    }
-    broadcast_chat_message(test_message)
-    return jsonify({'success': True, 'message': 'Test SSE message sent'})
-
-@app.route('/api/debug')
-def debug_endpoint():
-    """Simple debug endpoint to test if browser can reach Flask"""
-    print(f"[{now()}] [DEBUG] Browser reached debug endpoint")
-    return jsonify({
-        'success': True, 
-        'message': 'Debug endpoint reached successfully',
-        'sse_clients': len(chat_sse_clients),
-        'timestamp': datetime.now().isoformat()
-    })
-
 @app.route('/api/refresh_token', methods=['POST'])
 def refresh_token():
     try:

@@ -18,8 +18,6 @@ import time
 import select
 from collections import deque
 from typing import Optional
-import urllib.parse
-import io
 import queue
 
 # Add parent directory to path to import from tools
@@ -824,8 +822,10 @@ class ZeddyBot(commands.Bot):
 
         @self.command()
         async def twitch_chat(ctx, *, message):
-            if self.twitch_chat_bot.send_message(message):
-                await ctx.send(f"Message sent to Twitch chat: {message}")
+            # Include Discord username in the message
+            formatted_message = f"[{ctx.author.display_name}]: {message}"
+            if self.twitch_chat_bot.send_message(formatted_message):
+                await ctx.send(f"Message sent to Twitch chat: {formatted_message}")
             else:
                 await ctx.send("Failed to send message to Twitch chat.")
 
@@ -1026,14 +1026,14 @@ class ZeddyBot(commands.Bot):
         stopped = before_activities - after_activities
 
         for act_type, act_name in started:
-            self.log_once(f"[{now()}] [DISCORD] User '{after.name}' started activity: {act_type.name} ({act_name})")
+            print(f"[{now()}] [DISCORD] User '{after.name}' started activity: {act_type.name} ({act_name})")
         for act_type, act_name in stopped:
-            self.log_once(f"[{now()}] [DISCORD] User '{after.name}' stopped activity: {act_type.name} ({act_name})")
+            print(f"[{now()}] [DISCORD] User '{after.name}' stopped activity: {act_type.name} ({act_name})")
 
         if before.status == discord.Status.offline and after.status != discord.Status.offline:
-            self.log_once(f"[{now()}] [DISCORD] User '{after.name}' has come online.")
+            print(f"[{now()}] [DISCORD] User '{after.name}' has come online.")
         elif before.status != discord.Status.offline and after.status == discord.Status.offline:
-            self.log_once(f"[{now()}] [DISCORD] User '{after.name}' has gone offline.")
+            print(f"[{now()}] [DISCORD] User '{after.name}' has gone offline.")
 
         
     async def _handle_live_role_update(self, before, after):

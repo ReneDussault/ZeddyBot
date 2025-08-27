@@ -33,7 +33,9 @@ A Python-based Discord and Twitch integration bot that provides real-time stream
   - Enhanced logging with broadcast monitoring
 
 ## Screenshots
+
 ### Dashboard
+
 ![Dashboard](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/dashboard.png)
 _Real-time dashboard with instant chat updates_
 
@@ -55,9 +57,13 @@ _Real-time dashboard with instant chat updates_
 
 ![Twitch](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/twitch.png)
 
+### Discord chat connected to Twitch chat
+
+![DiscordChat](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/discord.png)
+
 ### Twitch Chat Integration
 
-![Twitch](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/twitchchat.png)
+![TwitchChat](https://github.com/ReneDussault/ZeddyBot/blob/main/screenshots/twitchchat.png)
 
 ## Setup
 

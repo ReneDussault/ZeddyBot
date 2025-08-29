@@ -810,6 +810,22 @@ class ZeddyBot(commands.Bot):
         Some boilerplate commands and events
         """
 
+        @self.event
+        async def on_command_error(ctx, error):
+            """Handle command errors gracefully"""
+            if isinstance(error, commands.CommandNotFound):
+                # Silently ignore unknown commands - don't spam logs or send error messages
+                return
+            elif isinstance(error, commands.MissingRequiredArgument):
+                await ctx.send(f"❌ Missing required argument. Use `!help {ctx.command}` for usage info.")
+            elif isinstance(error, commands.BadArgument):
+                await ctx.send(f"❌ Invalid argument. Use `!help {ctx.command}` for usage info.")
+            elif isinstance(error, commands.MissingPermissions):
+                await ctx.send("❌ You don't have permission to use this command.")
+            else:
+                # Log other errors but don't spam the user
+                print(f"[{now()}] [DISCORD] Command error:\n    ╰› {error}")
+
         @self.command()
         async def ping(ctx):
             await ctx.send("Pong!")
@@ -1220,7 +1236,8 @@ chat_sse_clients = []
 
 def broadcast_chat_message(message_data):
     """Broadcast new chat message to all connected SSE clients"""
-    print(f"[{now()}] [SSE] Broadcasting message to {len(chat_sse_clients)} clients: \n    ╰› {message_data['username']}: {message_data['message']}")
+    if len(chat_sse_clients) > 1:
+        print(f"[{now()}] [SSE] Broadcasting message to {len(chat_sse_clients)} clients: \n    ╰› {message_data['username']}: {message_data['message']}")
 
     if not chat_sse_clients:
         return

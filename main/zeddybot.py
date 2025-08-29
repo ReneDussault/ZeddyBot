@@ -1236,7 +1236,7 @@ chat_sse_clients = []
 
 def broadcast_chat_message(message_data):
     """Broadcast new chat message to all connected SSE clients"""
-    if len(chat_sse_clients) > 1:
+    if len(chat_sse_clients) > 0:
         print(f"[{now()}] [SSE] Broadcasting message to {len(chat_sse_clients)} clients: \n    ╰› {message_data['username']}: {message_data['message']}")
 
     if not chat_sse_clients:

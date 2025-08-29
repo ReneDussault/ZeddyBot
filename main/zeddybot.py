@@ -616,7 +616,7 @@ class DashboardData:
             sys.stderr = old_stderr
             # Any exception from ReqClient creation or version check
             self.obs_client = None
-            print(f"[{now()}] [OBS] ⚠️  OBS not running or unreachable")
+            print(f"[{now()}] [OBS] ⚠️ OBS not running or unreachable")
             print(f"[{now()}] [OBS] Continue without OBS integration")
 
     def obs_reconnect(self):
@@ -1868,10 +1868,13 @@ def initialize_components():
     time.sleep(2)
     
     # Step 5: Connect to OBS
-    print(f"[{now()}] [OBS] Connecting to OBS...")
     dashboard_data.connect_obs()
     
-    print(f"[{now()}] [SYSTEM] All components initialized!")
+    # Check OBS status and print appropriate completion message
+    if dashboard_data.obs_client is not None:
+        print(f"[{now()}] [SYSTEM] All components initialized!")
+    else:
+        print(f"[{now()}] [SYSTEM] Core components initialized! (OBS integration disabled)")
 
 
 if __name__ == "__main__":

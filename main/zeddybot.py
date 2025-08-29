@@ -1241,8 +1241,7 @@ def broadcast_chat_message(message_data):
 
     if not chat_sse_clients:
         return
-        
-    
+
     # Format as SSE data
     sse_data = f"data: {json.dumps(message_data)}\n\n"
     

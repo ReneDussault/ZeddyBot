@@ -1041,10 +1041,41 @@ class ZeddyBot(commands.Bot):
         started = after_activities - before_activities
         stopped = before_activities - after_activities
 
+        # Handle started activities with detailed information
         for act_type, act_name in started:
-            print(f"[{now()}] [DISCORD] User '{after.name}' started activity:\n    ╰› {act_type.name} ({act_name})")
+            # Find the actual activity object to get detailed info
+            activity = None
+            for a in after.activities:
+                if a.type == act_type and getattr(a, 'name', None) == act_name:
+                    activity = a
+                    break
+            
+            if activity and isinstance(activity, discord.Spotify):
+                # Special handling for Spotify activities
+                print(f"[{now()}] [DISCORD] User '{after.name}' started activity:")
+                print(f"    ╰› 🎵 {act_type.name} ({act_name})")
+                print(f"    ╰› 🎵 {activity.artist} - {activity.title}")
+
+            else:
+                print(f"[{now()}] [DISCORD] User '{after.name}' started activity:")
+                print(f"    ╰› {act_type.name} ({act_name})")
+
         for act_type, act_name in stopped:
-            print(f"[{now()}] [DISCORD] User '{after.name}' stopped activity:\n    ╰› {act_type.name} ({act_name})")
+            # Find the actual activity object for stopped activities too
+            activity = None
+            for a in before.activities:
+                if a.type == act_type and getattr(a, 'name', None) == act_name:
+                    activity = a
+                    break
+
+            if activity and isinstance(activity, discord.Spotify):
+                print(f"[{now()}] [DISCORD] User '{after.name}' stopped activity:")
+                print(f"    ╰› {act_type.name} ({act_name})")
+
+            else:
+                print(f"[{now()}] [DISCORD] User '{after.name}' stopped activity:")
+                print(f"    ╰› {act_type.name} ({act_name})")
+
 
         if before.status == discord.Status.offline and after.status != discord.Status.offline:
             print(f"[{now()}] [DISCORD] User '{after.name}' has come online.")
@@ -1874,7 +1905,7 @@ def initialize_components():
     if dashboard_data.obs_client is not None:
         print(f"[{now()}] [SYSTEM] All components initialized!")
     else:
-        print(f"[{now()}] [SYSTEM] Core components initialized! (OBS integration disabled)")
+        print(f"[{now()}] [SYSTEM] Core components initialized:\n    ╰› (OBS integration disabled)")
 
 
 if __name__ == "__main__":

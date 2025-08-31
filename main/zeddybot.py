@@ -363,20 +363,31 @@ class TwitchChatBot:
             return
 
         try:
-            data = self.socket.recv(2048).decode("utf-8")
-            lines = data.strip().split('\r\n')
+            # Set socket to non-blocking to prevent blocking the Discord event loop
+            self.socket.setblocking(False)
             
-            for line in lines:
-                if line.startswith("PING"):
-                    if self.socket is not None:
-                        self.socket.send("PONG\r\n".encode("utf-8"))
-                # Chat message parsing is now handled by DashboardData thread
-        except socket.error:
-            # Connection lost
-            self.connected = False
+            try:
+                data = self.socket.recv(2048).decode("utf-8")
+                lines = data.strip().split('\r\n')
+                
+                for line in lines:
+                    if line.startswith("PING"):
+                        if self.socket is not None:
+                            self.socket.send("PONG :tmi.twitch.tv\r\n".encode("utf-8"))
+                    # Chat message parsing is now handled by DashboardData thread
+            except BlockingIOError:
+                # No data available, this is normal for non-blocking sockets
+                pass
+            except socket.error:
+                # Connection lost
+                self.connected = False
         except Exception as e:
             if "timed out" not in str(e).lower():
                 print(f"[{now()}] [TWITCH] Error in check_for_ping: {e}")
+        finally:
+            # Always restore blocking mode for other operations
+            if self.socket:
+                self.socket.setblocking(True)
 
 
 class StreamNotificationManager:

@@ -143,8 +143,13 @@ class TwitchAPI:
             "client_secret": self.config.twitch_secret,
             "grant_type": "client_credentials",
         }
-        response = requests.post("https://id.twitch.tv/oauth2/token", params=params)
-        return response.json()["access_token"]
+        try:
+            response = requests.post("https://id.twitch.tv/oauth2/token", params=params, timeout=10)
+            response.raise_for_status()
+            return response.json().get("access_token", "")
+        except Exception as e:
+            print(f"[{now()}] [TWITCH] Error getting app access token: {e}")
+            return ""
 
     def refresh_bot_token(self):
         success, message, new_token = refresh_twitch_bot_token("config.json")
@@ -164,17 +169,45 @@ class TwitchAPI:
             "Authorization": f"Bearer {self.config.access_token}",
             "Client-Id": self.config.twitch_client_id,
         }
-        response = requests.get("https://api.twitch.tv/helix/users", params=params, headers=headers)
-        return {entry["login"]: entry["id"] for entry in response.json()["data"]}
+        try:
+            response = requests.get("https://api.twitch.tv/helix/users", params=params, headers=headers, timeout=10)
+            if response.status_code == 401:
+                # App token expired, refresh and retry once
+                print(f"[{now()}] [TWITCH] App token expired, refreshing...")
+                new_app_token = self.get_app_access_token()
+                if new_app_token:
+                    self.config.access_token = new_app_token
+                    self.config.save()
+                    headers["Authorization"] = f"Bearer {new_app_token}"
+                    response = requests.get("https://api.twitch.tv/helix/users", params=params, headers=headers, timeout=10)
+            response.raise_for_status()
+            return {entry["login"]: entry["id"] for entry in response.json().get("data", [])}
+        except Exception as e:
+            print(f"[{now()}] [TWITCH] Error fetching users: {e}")
+            return {}
 
     def get_streams(self, users):
-        params = {"user_id": users.values()}
+        params = {"user_id": list(users.values())}
         headers = {
             "Authorization": f"Bearer {self.config.access_token}",
             "Client-Id": self.config.twitch_client_id,
         }
-        response = requests.get("https://api.twitch.tv/helix/streams", params=params, headers=headers)
-        return {entry["user_login"]: entry for entry in response.json()["data"]}
+        try:
+            response = requests.get("https://api.twitch.tv/helix/streams", params=params, headers=headers, timeout=10)
+            if response.status_code == 401:
+                # App token expired, refresh and retry once
+                print(f"[{now()}] [TWITCH] App token expired, refreshing...")
+                new_app_token = self.get_app_access_token()
+                if new_app_token:
+                    self.config.access_token = new_app_token
+                    self.config.save()
+                    headers["Authorization"] = f"Bearer {new_app_token}"
+                    response = requests.get("https://api.twitch.tv/helix/streams", params=params, headers=headers, timeout=10)
+            response.raise_for_status()
+            return {entry["user_login"]: entry for entry in response.json().get("data", [])}
+        except Exception as e:
+            print(f"[{now()}] [TWITCH] Error fetching streams: {e}")
+            return {}
 
 
 class TwitchChatBot:
@@ -190,36 +223,83 @@ class TwitchChatBot:
         
     def connect(self):
         try:
-            # Clean up any existing socket
-            if self.socket:
+            # We'll attempt to connect up to 2 times, refreshing token on auth failure
+            for attempt in range(2):
+                # Clean up any existing socket
+                if self.socket:
+                    try:
+                        self.socket.close()
+                    except:
+                        pass
+
+                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.socket.settimeout(10)  # 10 second timeout for connection
+                self.socket.connect((self.server, self.port))
+
+                # Authenticate
+                self.socket.send(f"PASS oauth:{self.config.twitch_chat_token}\r\n".encode('utf-8'))
+                self.socket.send(f"NICK {self.config.twitch_bot_username}\r\n".encode('utf-8'))
+                self.socket.send(f"JOIN {self.channel}\r\n".encode('utf-8'))
+
+                # Collect server response(s)
+                response = ""
                 try:
-                    self.socket.close()
-                except:
+                    # Read multiple times briefly to catch auth errors
+                    start = time.time()
+                    while time.time() - start < 2:
+                        try:
+                            chunk = self.socket.recv(2048).decode('utf-8', errors='ignore')
+                            if not chunk:
+                                break
+                            response += chunk
+                            # Break early if we see success or failure markers
+                            if ("Welcome, GLHF!" in response or 
+                                "End of /NAMES list" in response or 
+                                "Login authentication failed" in response or 
+                                "Improperly formatted auth" in response):
+                                break
+                        except socket.timeout:
+                            break
+                        except BlockingIOError:
+                            break
+                except Exception:
                     pass
-                    
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(10)  # 10 second timeout for connection
-            self.socket.connect((self.server, self.port))
-            
-            # Authenticate
-            self.socket.send(f"PASS oauth:{self.config.twitch_chat_token}\r\n".encode('utf-8'))
-            self.socket.send(f"NICK {self.config.twitch_bot_username}\r\n".encode('utf-8'))
-            self.socket.send(f"JOIN {self.channel}\r\n".encode('utf-8'))
-            
-            # Wait for successful connection
-            response = self.socket.recv(2048).decode('utf-8')
-            if "Welcome, GLHF!" in response or "End of /NAMES list" in response:
-                message = "Operational status: Online."
-                self.connected = True
-                self.socket.settimeout(None)  # Remove timeout for normal operation
-                print(f"[{now()}] [TWITCH] Connected to chat as {self.config.twitch_bot_username}")
-                print(f"[{now()}] [TWITCH] Sending to chat: {message}")
-                self.send_message(message)
-                return True
-            else:
-                print(f"[{now()}] [TWITCH] Unexpected response during connection: {response}")
-                return False
-                
+
+                if "Login authentication failed" in response or \
+                   ":tmi.twitch.tv NOTICE * :Login authentication failed" in response:
+                    print(f"[{now()}] [TWITCH] Login authentication failed during connect attempt {attempt+1}")
+                    # Try to refresh token and retry once
+                    if attempt == 0:
+                        print(f"[{now()}] [TWITCH] Attempting automatic token refresh...")
+                        if self.twitch_api.refresh_bot_token():
+                            print(f"[{now()}] [TWITCH] Token refreshed, retrying chat connection...")
+                            continue
+                        else:
+                            print(f"[{now()}] [TWITCH] Token refresh failed; aborting connection")
+                            return False
+                    else:
+                        return False
+                elif "Improperly formatted auth" in response:
+                    print(f"[{now()}] [TWITCH] Improperly formatted auth; check token format")
+                    return False
+                elif "Welcome, GLHF!" in response or "End of /NAMES list" in response or ":tmi.twitch.tv 001" in response:
+                    message = "Operational status: Online."
+                    self.connected = True
+                    self.socket.settimeout(None)  # Remove timeout for normal operation
+                    print(f"[{now()}] [TWITCH] Connected to chat as {self.config.twitch_bot_username}")
+                    print(f"[{now()}] [TWITCH] Sending to chat: {message}")
+                    self.send_message(message)
+                    return True
+                else:
+                    print(f"[{now()}] [TWITCH] Unexpected response during connection: {response}")
+                    # If first attempt with no obvious error, don't refresh again blindly
+                    if attempt == 0:
+                        time.sleep(1)
+                        continue
+                    return False
+
+            return False
+
         except socket.timeout:
             print(f"[{now()}] [TWITCH] Timeout connecting to chat")
             return False
@@ -398,27 +478,33 @@ class StreamNotificationManager:
         self.online_users = {}
 
     def get_notifications(self):
-        users = self.twitch_api.get_users(self.config.watchlist)
-        streams = self.twitch_api.get_streams(users)
+        try:
+            users = self.twitch_api.get_users(self.config.watchlist)
+            if not users:
+                return []
+            streams = self.twitch_api.get_streams(users)
 
-        notifications = []
-        for user_name in self.config.watchlist:
-            if user_name not in self.online_users:
-                self.online_users[user_name] = datetime.now(timezone.utc)
+            notifications = []
+            for user_name in self.config.watchlist:
+                if user_name not in self.online_users:
+                    self.online_users[user_name] = datetime.now(timezone.utc)
 
-            if user_name not in streams:
-                self.online_users[user_name] = None
-            else:
-                started_at = datetime.strptime(streams[user_name]["started_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-                if self.online_users[user_name] is None or started_at > self.online_users[user_name]:
-                    notifications.append(streams[user_name])
-                    self.online_users[user_name] = started_at
+                if user_name not in streams:
+                    self.online_users[user_name] = None
+                else:
+                    started_at = datetime.strptime(streams[user_name]["started_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                    if self.online_users[user_name] is None or started_at > self.online_users[user_name]:
+                        notifications.append(streams[user_name])
+                        self.online_users[user_name] = started_at
 
-                    # send notification to Twitch chat if this is the target channel
-                    if self.chat_bot and user_name.lower() == self.config.target_channel.lower():
-                        self.chat_bot.send_message(f"Stream is now live: {streams[user_name]['title']} - playing {streams[user_name]['game_name']}")
+                        # send notification to Twitch chat if this is the target channel
+                        if self.chat_bot and user_name.lower() == self.config.target_channel.lower():
+                            self.chat_bot.send_message(f"Stream is now live: {streams[user_name]['title']} - playing {streams[user_name]['game_name']}")
 
-        return notifications
+            return notifications
+        except Exception as e:
+            print(f"[{now()}] [DISCORD] Error in get_notifications: {e}")
+            return []
 
 
 class DashboardData:
@@ -467,6 +553,7 @@ class DashboardData:
             if self.chat_sock:
                 self.chat_sock.close()
             self.chat_sock = socket.socket()
+            self.chat_sock.settimeout(8)
             self.chat_sock.connect(("irc.chat.twitch.tv", 6667))
             
             # Use bot token if available, otherwise anonymous
@@ -478,7 +565,27 @@ class DashboardData:
                 self.chat_sock.send(f"NICK justinfan12345\r\n".encode('utf-8'))
             
             self.chat_sock.send(f"JOIN #{self.config.get('target_channel', '')}\r\n".encode('utf-8'))
-            print(f"[{now()}] [TWITCH] ✓ Chat connected: #{self.config.get('target_channel', '')}")
+            
+            # Read initial response to detect auth problems and fallback to anonymous
+            try:
+                resp = self.chat_sock.recv(1024).decode('utf-8', errors='ignore')
+            except socket.timeout:
+                resp = ""
+
+            if "Login authentication failed" in resp or ":tmi.twitch.tv NOTICE * :Login authentication failed" in resp:
+                # Fallback to anonymous read-only connection
+                try:
+                    self.chat_sock.close()
+                except Exception:
+                    pass
+                self.chat_sock = socket.socket()
+                self.chat_sock.settimeout(8)
+                self.chat_sock.connect(("irc.chat.twitch.tv", 6667))
+                self.chat_sock.send(f"NICK justinfan12345\r\n".encode('utf-8'))
+                self.chat_sock.send(f"JOIN #{self.config.get('target_channel', '')}\r\n".encode('utf-8'))
+                print(f"[{now()}] [TWITCH] ⚠️ Auth failed for chat reader; using anonymous read-only connection")
+            else:
+                print(f"[{now()}] [TWITCH] ✓ Chat connected: #{self.config.get('target_channel', '')}")
         except Exception as e:
             print(f"[{now()}] [TWITCH] Failed to connect to chat: {e}")
             self.chat_sock = None
@@ -720,16 +827,16 @@ class DashboardData:
             
             if user_response.status_code != 200:
                 print(f"[{now()}] [TWITCH] Failed to get user info: {user_response.status_code}")
-                self.cached_stream_status = None
+                self.cached_stream_status = { 'is_live': False, 'title': '', 'game_name': '', 'viewer_count': 0, 'started_at': '' }
                 self.last_stream_check = current_time
-                return None
+                return self.cached_stream_status
                 
             user_data = user_response.json()["data"]
             if not user_data:
                 print(f"[{now()}] [TWITCH] No user data found for channel: {self.config.get('target_channel', '')}")
-                self.cached_stream_status = None
+                self.cached_stream_status = { 'is_live': False, 'title': '', 'game_name': '', 'viewer_count': 0, 'started_at': '' }
                 self.last_stream_check = current_time
-                return None
+                return self.cached_stream_status
                 
             user_id = user_data[0]["id"]
             
@@ -743,18 +850,30 @@ class DashboardData:
             
             if stream_response.status_code == 200:
                 streams = stream_response.json()["data"]
-                stream_data = streams[0] if streams else None
+                if streams:
+                    raw = streams[0]
+                    stream_data = {
+                        'is_live': True,
+                        'title': raw.get('title', ''),
+                        'game_name': raw.get('game_name', ''),
+                        'viewer_count': raw.get('viewer_count', 0),
+                        'started_at': raw.get('started_at', ''),
+                        'user_login': raw.get('user_login', ''),
+                        'user_name': raw.get('user_name', '')
+                    }
+                else:
+                    stream_data = { 'is_live': False, 'title': '', 'game_name': '', 'viewer_count': 0, 'started_at': '' }
                 
-                # Cache the result
+                # Cache the result (normalized)
                 self.cached_stream_status = stream_data
                 self.last_stream_check = current_time
                 
                 return stream_data
             else:
                 print(f"[{now()}] [TWITCH] Failed to get stream info: {stream_response.status_code}")
-                self.cached_stream_status = None
+                self.cached_stream_status = { 'is_live': False, 'title': '', 'game_name': '', 'viewer_count': 0, 'started_at': '' }
                 self.last_stream_check = current_time
-                return None
+                return self.cached_stream_status
                 
         except requests.exceptions.Timeout:
             print(f"[{now()}] [TWITCH] API timeout")
@@ -1153,10 +1272,12 @@ class ZeddyBot(commands.Bot):
     async def update_token_task(self):
         acc_tok = self.twitch_api.get_app_access_token()
 
-        print(f"[{now()}] [TWITCH] Changing access token ")
-
-        self.config.access_token = acc_tok
-        self.config.save()
+        if acc_tok:
+            print(f"[{now()}] [TWITCH] Changing access token ")
+            self.config.access_token = acc_tok
+            self.config.save()
+        else:
+            print(f"[{now()}] [TWITCH] Skipping access token update (failed to retrieve new token)")
         await self.change_presence(status=discord.Status.online)
 
 
@@ -1180,18 +1301,22 @@ class ZeddyBot(commands.Bot):
 
     @loop(seconds=60)
     async def check_twitch_online_streamers(self):
-        if not self.CHANNEL_ID:
-            print(f"[{now()}] [DISCORD] Discord channel ID not configured")
-            return
-            
-        channel = self.get_channel(self.CHANNEL_ID)
-        if not channel:
-            print(f"[{now()}] [DISCORD] Could not find Discord channel with ID {self.CHANNEL_ID}")
-            return
+        try:
+            if not self.CHANNEL_ID:
+                print(f"[{now()}] [DISCORD] Discord channel ID not configured")
+                return
+                
+            channel = self.get_channel(self.CHANNEL_ID)
+            if not channel:
+                print(f"[{now()}] [DISCORD] Could not find Discord channel with ID {self.CHANNEL_ID}")
+                return
 
-        notifications = self.notification_manager.get_notifications()
-        for notification in notifications:
-            await self._send_stream_notification(channel, notification)
+            notifications = self.notification_manager.get_notifications()
+            for notification in notifications:
+                await self._send_stream_notification(channel, notification)
+        except Exception as e:
+            # Prevent task loop from crashing on network errors
+            print(f"[{now()}] [DISCORD] Error in check_twitch_online_streamers: {e}")
 
 
     async def _send_stream_notification(self, channel, notification):

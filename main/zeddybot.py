@@ -2117,6 +2117,31 @@ def initialize_components():
         print(f"[{now()}] [SYSTEM] Core components initialized:\n    ╰› (OBS integration disabled)")
 
 
+def get_local_ipv4_addresses():
+    """Return discovered non-loopback local IPv4 addresses for startup logging."""
+    addresses = set()
+
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        addresses.add(probe.getsockname()[0])
+        probe.close()
+    except Exception:
+        pass
+
+    try:
+        hostname = socket.gethostname()
+        for addr_info in socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM):
+            raw_addr = addr_info[4][0]
+            ip_addr = str(raw_addr)
+            if ip_addr and not ip_addr.startswith("127."):
+                addresses.add(ip_addr)
+    except Exception:
+        pass
+
+    return sorted(addresses)
+
+
 if __name__ == "__main__":
     def run_flask():
         app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
@@ -2125,7 +2150,12 @@ if __name__ == "__main__":
     initialize_components()
     
     # Start Flask server
-    print(f"[{now()}] [FLASK] Starting HTTP server on http://0.0.0.0:5000")
+    local_ips = get_local_ipv4_addresses()
+    if local_ips:
+        ip_urls = ", ".join([f"http://{ip}:5000" for ip in local_ips])
+        print(f"[{now()}] [FLASK] Starting HTTP server on {ip_urls} (bound to 0.0.0.0:5000)")
+    else:
+        print(f"[{now()}] [FLASK] Starting HTTP server on http://localhost:5000 (bound to 0.0.0.0:5000)")
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()

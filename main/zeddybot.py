@@ -1389,6 +1389,49 @@ dashboard_data = None
 bot = None
 
 
+def restart_twitch_connections():
+    """Reload Twitch auth config and reconnect active Twitch chat sockets."""
+    reconnect_status = {
+        "dashboard_chat_reader_restarted": False,
+        "twitch_chat_bot_reconnected": False,
+        "errors": []
+    }
+
+    # Reload dashboard config and force the chat reader thread to reconnect.
+    if dashboard_data:
+        try:
+            dashboard_data.load_config()
+            if dashboard_data.chat_sock:
+                try:
+                    dashboard_data.chat_sock.close()
+                except Exception:
+                    pass
+            dashboard_data.chat_sock = None
+            reconnect_status["dashboard_chat_reader_restarted"] = True
+        except Exception as e:
+            reconnect_status["errors"].append(f"dashboard chat reader: {e}")
+
+    # Reload bot config in memory and reconnect Twitch sender bot socket.
+    if config:
+        try:
+            with open("config.json") as config_file:
+                config.data = json.load(config_file)
+        except Exception as e:
+            reconnect_status["errors"].append(f"bot config reload: {e}")
+
+    if bot and getattr(bot, "twitch_chat_bot", None):
+        try:
+            bot.twitch_chat_bot.disconnect()
+            reconnect_status["twitch_chat_bot_reconnected"] = bot.twitch_chat_bot.connect()
+        except Exception as e:
+            reconnect_status["errors"].append(f"twitch chat bot reconnect: {e}")
+
+    if dashboard_data:
+        dashboard_data.bot_status["twitch_connected"] = reconnect_status["twitch_chat_bot_reconnected"]
+
+    return reconnect_status
+
+
 def create_flask_app():
     """Create and configure Flask app"""
     flask_app = Flask(__name__, template_folder='../templates')
@@ -1683,9 +1726,26 @@ def refresh_token():
             
         success, message, new_token = refresh_twitch_bot_token("config.json")
         if success:
-            # Reload config to get updated token
-            dashboard_data.load_config()
-            return jsonify({'success': True, 'message': message})
+            reconnect_status = restart_twitch_connections()
+            reconnect_errors = reconnect_status.get("errors", [])
+
+            if reconnect_errors:
+                reconnect_msg = "Token refreshed, but reconnect had issues: " + "; ".join(reconnect_errors)
+            elif reconnect_status.get("twitch_chat_bot_reconnected"):
+                reconnect_msg = "Token refreshed and Twitch chat reconnected"
+            else:
+                reconnect_msg = "Token refreshed; Twitch chat reconnect pending"
+
+            return jsonify({
+                'success': True,
+                'message': reconnect_msg,
+                'details': {
+                    'token_refresh_message': message,
+                    'dashboard_chat_reader_restarted': reconnect_status.get('dashboard_chat_reader_restarted', False),
+                    'twitch_chat_bot_reconnected': reconnect_status.get('twitch_chat_bot_reconnected', False),
+                    'errors': reconnect_errors,
+                }
+            })
         else:
             return jsonify({'success': False, 'error': message}), 500
     except Exception as e:

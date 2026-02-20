@@ -926,6 +926,7 @@ class ZeddyBot(commands.Bot):
         self.twitch_api = TwitchAPI(config)
         self.twitch_chat_bot = TwitchChatBot(config, self.twitch_api)
         self.notification_manager = StreamNotificationManager(self.twitch_api, config, self.twitch_chat_bot)
+        self._bot_token_task_initialized = False
 
         self.CHANNEL_ID = int(config.discord_channel_id) if config.discord_channel_id else None
         self.LIVE_ROLE_ID = config.discord_live_role_id
@@ -1091,13 +1092,23 @@ class ZeddyBot(commands.Bot):
             
             # Initialize Discord stats cache
             await self.update_discord_stats()
+
+            print(f"[{now()}] [TWITCH] Refreshing bot token before chat connect...")
+            refresh_ok = self.twitch_api.refresh_bot_token()
+            if refresh_ok:
+                print(f"[{now()}] [TWITCH] Bot token ready for account {self.config.twitch_bot_username}")
+            else:
+                print(f"[{now()}] [TWITCH] Bot token refresh failed for account {self.config.twitch_bot_username}; trying existing token")
+
+            if self.twitch_chat_bot.connect():
+                print(f"[{now()}] [TWITCH] Startup chat ready on #{self.config.target_channel} as {self.config.twitch_bot_username}")
+            else:
+                print(f"[{now()}] [TWITCH] Startup chat connection failed for #{self.config.target_channel} as {self.config.twitch_bot_username}")
             
             self.update_token_task.start()
             self.update_bot_token_task.start()
             self.check_twitch_online_streamers.start()
             self.check_twitch_ping.start()
-
-            self.twitch_chat_bot.connect()
 
 
         @self.listen("on_member_update")
@@ -1286,9 +1297,10 @@ class ZeddyBot(commands.Bot):
         acc_tok = self.twitch_api.get_app_access_token()
 
         if acc_tok:
-            print(f"[{now()}] [TWITCH] Changing access token ")
+            print(f"[{now()}] [TWITCH] Refreshed Twitch app access token")
             self.config.access_token = acc_tok
             self.config.save()
+            print(f"[{now()}] [TWITCH] API ready as client_id {self.config.twitch_client_id}")
         else:
             print(f"[{now()}] [TWITCH] Skipping access token update (failed to retrieve new token)")
         await self.change_presence(status=discord.Status.online)
@@ -1296,7 +1308,26 @@ class ZeddyBot(commands.Bot):
 
     @loop(hours=24)
     async def update_bot_token_task(self):
-        self.twitch_api.refresh_bot_token()
+        if not self._bot_token_task_initialized:
+            self._bot_token_task_initialized = True
+            return
+
+        refresh_ok = self.twitch_api.refresh_bot_token()
+
+        account_name = self.config.twitch_bot_username
+        target_channel = self.config.target_channel
+
+        if refresh_ok:
+            connected = self.twitch_chat_bot.is_connected()
+            if not connected:
+                connected = self.twitch_chat_bot.connect()
+
+            if connected:
+                print(f"[{now()}] [TWITCH] Chat ready on #{target_channel} as {account_name}")
+            else:
+                print(f"[{now()}] [TWITCH] Token refreshed, but chat is offline for #{target_channel} as {account_name}")
+        else:
+            print(f"[{now()}] [TWITCH] Token refresh failed for chat account {account_name}")
 
 
     @loop(minutes=2)

@@ -1307,7 +1307,7 @@ class ZeddyBot(commands.Bot):
             print(f"[{now()}] [TWITCH] Refreshed Twitch app access token")
             self.config.access_token = acc_tok
             self.config.save()
-            print(f"[{now()}] [TWITCH] API ready as client_id {self.config.twitch_client_id}")
+            print(f"[{now()}] [TWITCH] Twitch API authentication ready")
         else:
             print(f"[{now()}] [TWITCH] Skipping access token update (failed to retrieve new token)")
         await self.change_presence(status=discord.Status.online)

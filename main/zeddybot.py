@@ -221,7 +221,7 @@ class TwitchChatBot:
         self.connected = False
         self.channel = f"#{config.target_channel}"
         
-    def connect(self):
+    def connect(self, verbose=True):
         try:
             # We'll attempt to connect up to 2 times, refreshing token on auth failure
             for attempt in range(2):
@@ -267,31 +267,38 @@ class TwitchChatBot:
 
                 if "Login authentication failed" in response or \
                    ":tmi.twitch.tv NOTICE * :Login authentication failed" in response:
-                    print(f"[{now()}] [TWITCH] Login authentication failed during connect attempt {attempt+1}")
+                    if verbose:
+                        print(f"[{now()}] [TWITCH] Login authentication failed during connect attempt {attempt+1}")
                     # Try to refresh token and retry once
                     if attempt == 0:
-                        print(f"[{now()}] [TWITCH] Attempting automatic token refresh...")
+                        if verbose:
+                            print(f"[{now()}] [TWITCH] Attempting automatic token refresh...")
                         if self.twitch_api.refresh_bot_token():
-                            print(f"[{now()}] [TWITCH] Token refreshed, retrying chat connection...")
+                            if verbose:
+                                print(f"[{now()}] [TWITCH] Token refreshed, retrying chat connection...")
                             continue
                         else:
-                            print(f"[{now()}] [TWITCH] Token refresh failed; aborting connection")
+                            if verbose:
+                                print(f"[{now()}] [TWITCH] Token refresh failed; aborting connection")
                             return False
                     else:
                         return False
                 elif "Improperly formatted auth" in response:
-                    print(f"[{now()}] [TWITCH] Improperly formatted auth; check token format")
+                    if verbose:
+                        print(f"[{now()}] [TWITCH] Improperly formatted auth; check token format")
                     return False
                 elif "Welcome, GLHF!" in response or "End of /NAMES list" in response or ":tmi.twitch.tv 001" in response:
                     message = "Operational status: Online."
                     self.connected = True
                     self.socket.settimeout(None)  # Remove timeout for normal operation
-                    print(f"[{now()}] [TWITCH] Connected to chat as {self.config.twitch_bot_username}")
-                    print(f"[{now()}] [TWITCH] Sending to chat: {message}")
+                    if verbose:
+                        print(f"[{now()}] [TWITCH] Connected to chat as {self.config.twitch_bot_username}")
+                        print(f"[{now()}] [TWITCH] Sending to chat: {message}")
                     self.send_message(message)
                     return True
                 else:
-                    print(f"[{now()}] [TWITCH] Unexpected response during connection: {response}")
+                    if verbose:
+                        print(f"[{now()}] [TWITCH] Unexpected response during connection: {response}")
                     # If first attempt with no obvious error, don't refresh again blindly
                     if attempt == 0:
                         time.sleep(1)
@@ -301,10 +308,12 @@ class TwitchChatBot:
             return False
 
         except socket.timeout:
-            print(f"[{now()}] [TWITCH] Timeout connecting to chat")
+            if verbose:
+                print(f"[{now()}] [TWITCH] Timeout connecting to chat")
             return False
         except Exception as e:
-            print(f"[{now()}] [TWITCH] Error connecting to chat: {e}")
+            if verbose:
+                print(f"[{now()}] [TWITCH] Error connecting to chat: {e}")
             return False
 
     def is_connected(self):
@@ -1093,14 +1102,12 @@ class ZeddyBot(commands.Bot):
             # Initialize Discord stats cache
             await self.update_discord_stats()
 
-            print(f"[{now()}] [TWITCH] Refreshing bot token before chat connect...")
+            print(f"[{now()}] [TWITCH] Preparing chat authentication...")
             refresh_ok = self.twitch_api.refresh_bot_token()
-            if refresh_ok:
-                print(f"[{now()}] [TWITCH] Bot token ready for account {self.config.twitch_bot_username}")
-            else:
+            if not refresh_ok:
                 print(f"[{now()}] [TWITCH] Bot token refresh failed for account {self.config.twitch_bot_username}; trying existing token")
 
-            if self.twitch_chat_bot.connect():
+            if self.twitch_chat_bot.connect(verbose=False):
                 print(f"[{now()}] [TWITCH] Startup chat ready on #{self.config.target_channel} as {self.config.twitch_bot_username}")
             else:
                 print(f"[{now()}] [TWITCH] Startup chat connection failed for #{self.config.target_channel} as {self.config.twitch_bot_username}")

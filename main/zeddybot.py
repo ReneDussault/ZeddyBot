@@ -536,11 +536,24 @@ class DashboardData:
             while True:
                 try:
                     self.connect_to_chat()
-                    while self.chat_sock:
-                        ready = select.select([self.chat_sock], [], [], 1)
-                        if ready[0]:
-                            data = self.chat_sock.recv(1024).decode('utf-8', errors='ignore')
-                            self.parse_chat_messages(data)
+                    while True:
+                        active_sock = self.chat_sock
+                        if active_sock is None:
+                            break
+
+                        try:
+                            ready = select.select([active_sock], [], [], 1)
+                            if ready[0]:
+                                data = active_sock.recv(1024)
+                                if not data:
+                                    self.chat_sock = None
+                                    break
+                                self.parse_chat_messages(data.decode('utf-8', errors='ignore'))
+                        except (OSError, ValueError):
+                            if active_sock is not self.chat_sock:
+                                break
+                            self.chat_sock = None
+                            break
                 except Exception as e:
                     print(f"[{now()}] [TWITCH] Chat reader error: {e}")
                     time.sleep(5)

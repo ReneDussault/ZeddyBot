@@ -2153,7 +2153,7 @@ if __name__ == "__main__":
     local_ips = get_local_ipv4_addresses()
     if local_ips:
         ip_urls = ", ".join([f"http://{ip}:5000" for ip in local_ips])
-        print(f"[{now()}] [FLASK] Starting HTTP server on {ip_urls} (bound to 0.0.0.0:5000)")
+        print(f"[{now()}] [FLASK] Starting HTTP server on {ip_urls}")
     else:
         print(f"[{now()}] [FLASK] Starting HTTP server on http://localhost:5000 (bound to 0.0.0.0:5000)")
     flask_thread = threading.Thread(target=run_flask)

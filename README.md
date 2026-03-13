@@ -131,8 +131,8 @@ _Real-time dashboard with instant chat updates_
    python main/zeddybot.py
    ```
 
-   The bot includes an integrated Flask dashboard with real-time chat capabilities.
-   Open [http://localhost:5000](http://localhost:5000) to access the dashboard.
+   The bot includes an integrated Flask dashboard with real-time chat capabilities.  
+   To access the dashboard, use the IP printed in the terminal when you start the bot.
 
 ## Commands
 
